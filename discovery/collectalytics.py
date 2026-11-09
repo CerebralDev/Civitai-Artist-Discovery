@@ -30,7 +30,7 @@ From Civitai's source (Oct 2026):
   collection the account owns or may add to, whatever their status, with ``addedById``.
   That names the submitter; ``user.getCreator`` with ``id`` gives their username.
 - ``collection.updateCollectionItemsStatus`` with ``ACCEPTED`` accepts, for the owner or a
-  manager, and notifies the submitter. Comments go through ``commentv2.upsert``; Civitai's
+  manager, and notifies the submitter. Comments go through the v3 comment API; Civitai's
   editor writes an @mention as a ``data-type="mention"`` span with ``data-id="mention:ID"``,
   and that id is what its notifications read.
 """
@@ -48,6 +48,7 @@ from .civitai import normalize
 from .social import CivitaiHTTPError
 from .history import preview_url, video_playback_url, video_still_url
 from .site import SITE_ORIGIN, image_url, profile_url
+from .write_guard import WriteGuard, WriteBlocked
 
 
 ITEM_PAGE_SIZE = 100
@@ -271,9 +272,10 @@ def followers_from(contributors: int | None, collaborators: int) -> int | None:
 
 
 class Collectalytics:
-    def __init__(self, social):
+    def __init__(self, social, write_guard=None):
         # Returns a signed-in client, or raises PermissionError when there is none.
         self.social = social
+        self.write_guard = write_guard or WriteGuard()
         self.lock = threading.Lock()
         # By account: when the list was read and the collections in it.
         self.choices: dict[int | None, tuple[float, list[dict]]] = {}
@@ -394,8 +396,18 @@ class Collectalytics:
                     raise NotWaiting("Civitai did not say who submitted this item, so the "
                                      "comment cannot thank them. Review it on Civitai.")
             client = self.social()
+            client.expected_account = user_id
+            action_key = self.write_guard.key(user_id, 'accept', collection_id, collection_item_id)
+            # Insert before any write, even for acceptance without a comment. This
+            # survives response loss, a refresh, simultaneous tabs and app restart.
+            self.write_guard.begin(action_key)
             if content:
-                client.comment_on_image(item["itemId"], content)
+                try:
+                    client.comment_on_image(item["itemId"], content)
+                    self.write_guard.mark(action_key, 'commented')
+                except Exception as error:
+                    raise WriteBlocked('Civitai did not confirm the comment. Review and finish '
+                                       'this action on Civitai; it will not be posted again here.') from error
             try:
                 client.set_collection_items_status(collection_id, [collection_item_id], "ACCEPTED")
             except Exception as error:
@@ -403,6 +415,7 @@ class Collectalytics:
                     raise CommentedNotAccepted("Your comment was posted, but accepting the item "
                                                "failed. Accept it on Civitai.") from error
                 raise
+            self.write_guard.mark(action_key, 'done')
             with self.lock:
                 cached = self.queues.get((user_id, collection_id))
                 if cached:

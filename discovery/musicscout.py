@@ -44,6 +44,7 @@ import urllib.parse
 import urllib.request
 
 from .civitai import normalize
+from .music_settings import catalog_collections
 from .history import video_original_url, video_playback_url, video_still_url
 from .site import API_URL, image_url, profile_url
 
@@ -115,8 +116,7 @@ HUB_CATCHUP_PAGES = 15
 HUB_CATCHUP_MARGIN_SECONDS = 900
 # Fetched per creator even when the cap is lower, so raising it a little needs no refetch.
 HUB_FETCH_MIN = 5
-# The reader is waiting, so this runs a few requests at a time outside the shared lane:
-# 111 creators took 84 seconds one by one on the lane and about one second this way.
+# Workers overlap local processing; every HTTP read still uses the shared request lane.
 HUB_WORKERS = 4
 HUB_USER_AGENT = "CivitaiArtistDiscovery/1.0 (local artist discovery app)"
 CDN_ROOT = "https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA"
@@ -147,27 +147,6 @@ QUEUES = (
      "perCreator": True, "signIn": True, "hub": "h3-museum"},
 )
 PER_CREATOR_QUEUES = {queue["id"] for queue in QUEUES if queue.get("perCreator")}
-
-
-def public_listing(params: dict, attempts: int = 3) -> dict:
-    """One public /api/v1/images read outside the shared lane, for the parallel build."""
-    request = urllib.request.Request(f"{API_URL}?{urllib.parse.urlencode(params)}",
-                                     headers={"Accept": "application/json",
-                                              "User-Agent": HUB_USER_AGENT})
-    for attempt in range(attempts):
-        try:
-            with urllib.request.urlopen(request, timeout=30) as response:
-                return json.loads(response.read())
-        except urllib.error.HTTPError as error:
-            if (error.code != 429 and error.code < 500) or attempt == attempts - 1:
-                raise
-            retry = error.headers.get("Retry-After")
-            time.sleep(float(retry) if retry and retry.isdigit() else 2.0 * (attempt + 1))
-        except (TimeoutError, urllib.error.URLError):
-            if attempt == attempts - 1:
-                raise
-            time.sleep(2.0 * (attempt + 1))
-    raise RuntimeError("unreachable")
 
 
 def _feed_position(cursor: object, items: list) -> float | None:
@@ -378,7 +357,7 @@ class Queue:
 class MusicScout:
     """The queues in use, keyed by everything that changes what they contain."""
 
-    def __init__(self, archive, social=None, root: Path | None = None):
+    def __init__(self, archive, social=None, root: Path | None = None, collections=None):
         # The archive's request path carries the shared API lane and adaptive pacing, so a
         # queue page waits its turn behind a day build rather than racing it.
         self.archive = archive
@@ -389,7 +368,12 @@ class MusicScout:
         # way it is limited to collected images elsewhere, and a reaction updates the
         # counts here so a revisit shows them.
         self.served: dict[int, dict] = {}
-        self.lock = threading.Lock()
+        self.lock = threading.RLock()
+        self.configuration = 0
+        self.account = None
+        self.collections = list(COLLECTIONS)
+        self.collection_by_key = dict(COLLECTION_BY_KEY)
+        self.queue_by_id = dict(QUEUE_BY_ID)
         # Per collection id: when it was read, its video ids, and its creators' usernames
         # by casefolded key, all from the same read.
         self.members: dict[int, tuple[float, set[int], dict[str, str]]] = {}
@@ -415,6 +399,51 @@ class MusicScout:
                                    "mask INTEGER NOT NULL, fetch_limit INTEGER NOT NULL, "
                                    "fetched_at REAL NOT NULL, entries TEXT NOT NULL)")
 
+        if collections is not None:
+            self.configure(collections)
+
+    def close(self):
+        with self.viewed_lock:
+            self.viewed_db.close()
+
+    def bind_account(self, account):
+        with self.lock:
+            if account != self.account:
+                self.account = account
+                self.configuration += 1
+                self.queues.clear()
+                self.members.clear()
+                self.served.clear()
+
+    def invalidate(self):
+        with self.lock:
+            self.configuration += 1
+            self.queues.clear()
+            self.served.clear()
+
+    def configure(self, values):
+        collections = catalog_collections(values)
+        with self.lock:
+            if collections == self.collections:
+                return
+            self.configuration += 1
+            self.collections = collections
+            self.collection_by_key = {item['key']: item for item in collections}
+            queues = [dict(item) for item in QUEUES[:3]]
+            for item in collections:
+                key = item['key']
+                hub = {'music-focus': 'mf-hub', 'h3-museum': 'museum-hub'}.get(key, key + '-hub')
+                queues.extend([
+                    {'id': key, 'name': item['name'], 'description': 'Recently added videos. Needs sign-in.',
+                     'signIn': True, 'collection': key},
+                    {'id': hub, 'name': item['name'] + ' creators', 'description': 'Newest videos from these creators.',
+                     'signIn': True, 'perCreator': True, 'hub': key}])
+                self.member_locks.setdefault(item['collectionId'], threading.Lock())
+            self.queue_by_id = {item['id']: item for item in queues}
+            self.queues.clear()
+            self.served.clear()
+            self.members.clear()
+
     def viewed_ids(self, image_ids) -> set[int]:
         ids = [int(value) for value in image_ids]
         if not ids:
@@ -435,9 +464,9 @@ class MusicScout:
         if queue_id == "music-models":
             return Queue([Feed(request, {**base, "modelId": model["modelId"]}, model["name"])
                           for model in MUSIC_MODELS], allow=allow)
-        queue = QUEUE_BY_ID[queue_id]
+        queue = self.queue_by_id[queue_id]
         if "collection" in queue:
-            collection = COLLECTION_BY_KEY[queue["collection"]]
+            collection = self.collection_by_key[queue["collection"]]
             if self.social is None:
                 raise PermissionError(f"Sign in to Civitai to load {collection['name']}")
             self.social()  # Fail now, not on the first page, when nobody is signed in.
@@ -449,7 +478,7 @@ class MusicScout:
             if self.social is None:
                 raise PermissionError(f"Sign in to Civitai to load {queue['name']}")
             feed = Feed(None, {})
-            feed.buffer = self.hub_entries(COLLECTION_BY_KEY[queue["hub"]], per_creator, mask)
+            feed.buffer = self.hub_entries(self.collection_by_key[queue["hub"]], per_creator, mask)
             feed.exhausted = True
             return Queue([feed], per_creator=per_creator, allow=allow)
         return Queue([Feed(request, base)], allow=allow)
@@ -457,19 +486,22 @@ class MusicScout:
     def page(self, queue_id: str, offset: int = 0, limit: int = 20,
              per_creator: int = PER_CREATOR_DEFAULT, levels=(1, 2), allow=lambda entry: True,
              refresh: bool = False) -> dict:
-        if queue_id not in QUEUE_BY_ID:
+        if queue_id not in self.queue_by_id:
             raise ValueError("Unknown queue")
         per_creator = min(PER_CREATOR_MAX, max(1, int(per_creator)))
         offset, limit = max(0, int(offset)), min(100, max(1, int(limit)))
         mask = sum(levels)
-        key = (queue_id, per_creator if queue_id in PER_CREATOR_QUEUES else None, mask)
+        key = (queue_id, per_creator if self.queue_by_id[queue_id].get("perCreator") else None, mask)
         with self.lock:
+            generation = self.configuration
             if refresh or key not in self.queues:
                 self.queues[key] = self._build(queue_id, per_creator, mask, allow)
             queue = self.queues[key]
         queue.allow = allow
         result = queue.page(offset, limit)
         with self.lock:
+            if generation != self.configuration:
+                raise ValueError("Collections or account changed. Refresh this queue.")
             self.served.update((entry["id"], entry) for entry in result["items"])
         viewed = self.viewed_ids(entry["id"] for entry in result["items"])
         # A copy per answer: the flag belongs to this moment, not to the shared entry.
@@ -485,6 +517,7 @@ class MusicScout:
         return dict(self._collection_listing(collection_id)[2])
 
     def _collection_listing(self, collection_id: int) -> tuple[float, set[int], dict[str, str]]:
+        generation = self.configuration
         with self.member_locks[collection_id]:
             cached = self.members.get(collection_id)
             if cached is not None and time.monotonic() - cached[0] < COLLECTION_TTL_SECONDS:
@@ -512,6 +545,9 @@ class MusicScout:
                 cursor = value.get("nextCursor")
                 if not cursor or not items:
                     break
+        with self.lock:
+            if generation != self.configuration:
+                raise ValueError('Collections or account changed. Refresh this queue.')
             self.members[collection_id] = (time.monotonic(), ids, creators)
             return self.members[collection_id]
 
@@ -525,7 +561,7 @@ class MusicScout:
     def _hub_fetch(self, username: str, mask: int, limit: int) -> list[dict]:
         params = {"username": username, "type": "video", "sort": "Newest", "limit": limit,
                   "browsingLevel": mask, "withMeta": "false"}
-        payload = public_listing(params)
+        payload, _ = self.archive._request(params)
         items = payload.get("items") if isinstance(payload.get("items"), list) else []
         return [entry for entry in (video_entry(raw) for raw in items) if entry]
 
@@ -577,7 +613,7 @@ class MusicScout:
                       "withMeta": "false"}
             if cursor:
                 params["cursor"] = cursor
-            payload = public_listing(params)
+            payload, _ = self.archive._request(params)
             items = payload.get("items") if isinstance(payload.get("items"), list) else []
             for raw in items:
                 key = str(raw.get("username") or "").casefold()
@@ -648,8 +684,7 @@ class MusicScout:
         with self.lock:
             return self.served.get(int(image_id))
 
-    @staticmethod
-    def catalog() -> dict:
-        return {"queues": list(QUEUES), "musicModels": list(MUSIC_MODELS),
-                "musicFocus": MUSIC_FOCUS, "collections": list(COLLECTIONS),
+    def catalog(self) -> dict:
+        return {"queues": list(self.queue_by_id.values()), "musicModels": list(MUSIC_MODELS),
+                "musicFocus": next(iter(self.collections), None), "collections": list(self.collections),
                 "perCreatorDefault": PER_CREATOR_DEFAULT, "perCreatorMax": PER_CREATOR_MAX}

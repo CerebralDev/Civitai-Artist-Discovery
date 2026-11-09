@@ -341,7 +341,7 @@ try:
                      text: await (await entry.getType('text/plain')).text() };
         }""")
         assert expected in clipboard["html"], clipboard
-        assert clipboard["text"] == f"The Music Focus 🎸 collection\n{CREATORS} unique creators 🎶\n30 videos collected\n30 followers", clipboard
+        assert clipboard["text"].replace('\r\n', '\n') == f"The Music Focus 🎸 collection\n{CREATORS} unique creators 🎶\n30 videos collected\n30 followers", clipboard
         page.locator("#caCopySource").click()
         page.wait_for_function("() => document.getElementById('caCopyStatus').textContent === 'HTML copied.'")
         assert page.evaluate("() => navigator.clipboard.readText()") == expected

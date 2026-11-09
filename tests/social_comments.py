@@ -27,6 +27,7 @@ assert json.loads(requests[0].data) == {"json": {
     "entityId": 801, "entityType": "image", "content": MUSIC_FOCUS["commentHtml"]}}
 
 for status in (401, 404, 429, 500):
+    social.API_LANE.not_before = 0
     error = social.CivitaiHTTPError(status, "Comment unavailable")
     with patch.object(social, "get_access_token", return_value="test-token"), \
          patch.object(client, "_send", side_effect=error) as send:

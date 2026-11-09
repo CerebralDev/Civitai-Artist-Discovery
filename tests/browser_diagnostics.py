@@ -74,12 +74,12 @@ with tempfile.TemporaryDirectory(prefix='cad3-browser-diagnostics-', ignore_clea
             for _ in range(80):
                 page.wait_for_timeout(100)
                 logged = logfile.read_text(encoding='utf-8') if logfile.exists() else ''
-                if all(value in logged for value in ('card_removed', 'image_load_recovered', 'original-failed')):
+                if all(value in logged for value in ('card_removed', 'image_load_recovered', 'image_load_failed')):
                     break
             else:
                 raise AssertionError(logged)
-            assert 'all-images-hidden-by-civitai-tags' in logged
-            assert '"imageId": 101' in logged and '"imageId": 102' in logged
+            assert 'all-images-hidden-by-civitai-tags' not in logged
+            assert 'imageId' not in logged and 'username' not in logged
             assert 'fake-secret' not in logged and '?token=' not in logged
             browser.close()
 

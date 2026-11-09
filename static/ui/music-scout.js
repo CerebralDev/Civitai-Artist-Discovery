@@ -1,5 +1,6 @@
 import { api } from './api.js';
 import { bindDialog } from './dialog.js';
+import { musicSettings } from './music-settings.js';
 
 // Music Scout: pick a video queue, then skim it one video at a time with sound. Two video
 // elements take turns, so the next video is already buffering while the current one plays
@@ -50,7 +51,7 @@ export function mountMusicScout() {
     // Reaction state is the account's own, so it is only known once signed in.
     auth: { connected: false, socialWrite: false },
     // Set by the server: only the collection's owner may add to it from here.
-    canAddFocus: false,
+    editableCollections: [],
     // The account's reactions per video id: as last known, with local clicks applied at
     // once. `baseline` is what they were when the video's listing counts were read, so a
     // count shown is the listing's count adjusted by the reader's own change since.
@@ -186,6 +187,23 @@ export function mountMusicScout() {
     });
   }
 
+  let refreshingCollections = null;
+  function refreshCollections() {
+    if (refreshingCollections) return refreshingCollections;
+    refreshingCollections = (async () => {
+      state.token++; state.loading = null; state.catalog = null;
+      state.members.clear(); state.items = []; state.queue = null;
+      state.editableCollections = []; saved.queue = null;
+      release(current); release(spare);
+      state.catalog = await api('/api/music/queues');
+      renderQueues();
+      if (state.active) await selectQueue('per-creator', { force: true });
+    })().finally(() => { refreshingCollections = null; });
+    return refreshingCollections;
+  }
+  const settingsButton = musicSettings(refreshCollections, () => current.pause());
+  window.addEventListener('shared-settings-changed', () => refreshCollections().catch(error => message(error.message)));
+
   function renderQueues() {
     const host = $('msQueues');
     host.replaceChildren();
@@ -208,7 +226,7 @@ export function mountMusicScout() {
     // Queue options sit at the right end of the bar, apart from the queue choice itself.
     const capped = state.catalog.queues.filter(queue => queue.perCreator);
     const options = $('msOptions');
-    options.replaceChildren();
+    options.replaceChildren(settingsButton);
     if (!capped.length) return;
     const label = document.createElement('label');
     label.className = 'ms-per-creator';
@@ -306,7 +324,7 @@ export function mountMusicScout() {
     const params = new URLSearchParams();
     for (const item of items) params.append('imageId', String(item.id));
     api(`/api/music/collection-status?${params}`).then(result => {
-      state.canAddFocus = !!result.canAdd;
+      state.editableCollections = result.editableCollections || [];
       for (const [key, images] of Object.entries(result.collections || {})) {
         for (const [id, value] of Object.entries(images)) setMember(key, id, value);
       }
@@ -320,7 +338,7 @@ export function mountMusicScout() {
     const name = collection.name;
     const known = state.members.get(collection.key)?.has(String(item.id));
     const inside = state.members.get(collection.key)?.get(String(item.id)) === true;
-    const addable = collection.key === state.catalog.musicFocus.key && state.canAddFocus;
+    const addable = state.editableCollections.includes(collection.collectionId);
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'ms-collection';
@@ -339,7 +357,7 @@ export function mountMusicScout() {
     }
     button.title = inside ? `In ${name}. Removing is done on Civitai.` : `Add to ${name}…`;
     button.disabled = state.focusing.has(String(item.id));
-    button.addEventListener('click', () => (inside ? openRemove(item) : openAdd(item)));
+    button.addEventListener('click', () => (inside ? openRemove(item) : openAdd(item, collection)));
     return button;
   }
 
@@ -364,11 +382,14 @@ export function mountMusicScout() {
   $('msRemoveOpen').addEventListener('click', () => { resumeAfterDialog = false; });
   for (const id of ['msCreator', 'msCivitai']) $(id).addEventListener('click', () => current.pause());
 
-  function openAdd(item) {
-    addTarget = item;
-    $('msFocusSummary').textContent = `Either post the default comment on ${item.username}’s video and add it to ${state.catalog.musicFocus.name}, or open it on Civitai to do both yourself.`;
+  function openAdd(item, collection) {
+    addTarget = { ...item, collection };
+    $('msFocusTitle').textContent = `Save to ${collection.name}?`;
+    $('msFocusSummary').textContent = collection.commentHtml ? 'Post the comment shown below, then save this video to the collection.' : 'Save this video without posting a comment.';
+    $('msFocusConfirm').textContent = collection.commentHtml ? 'Comment and save' : 'Save video';
     // The app's own markup, shown exactly as it will be posted, link and all.
-    $('msFocusComment').innerHTML = state.catalog.musicFocus.commentHtml || '';
+    $('msFocusComment').innerHTML = collection.commentHtml || '<p>No comment will be posted.</p>';
+    $('msFocusCopy').disabled = !collection.commentHtml;
     $('msFocusOpen').href = item.civitaiUrl;
     $('msFocusError').classList.add('hidden');
     $('msFocusConfirm').disabled = false;
@@ -425,16 +446,16 @@ export function mountMusicScout() {
     $('msFocusConfirm').disabled = true;
     renderReactions();
     try {
-      const result = await api('/api/music/focus', { method: 'POST', body: JSON.stringify({ imageId: item.id }) });
-      setMember(state.catalog.musicFocus.key, id, result.inCollection);
+      const result = await api('/api/music/focus', { method: 'POST', body: JSON.stringify({ imageId: item.id, collectionId: item.collection.collectionId }) });
+      setMember(item.collection.key, id, result.inCollection);
       addDialog.close();
-      message(result.alreadyIn ? 'That video was already in Music Focus; no comment was posted.'
-        : result.inCollection ? '' : 'The comment was posted, but Civitai does not list the video in Music Focus yet.');
+      message(result.alreadyIn ? 'That video was already in the collection; no comment was posted.'
+        : result.inCollection ? '' : 'Review collection membership on Civitai.');
     } catch (error) {
       $('msFocusError').textContent = error.message;
       $('msFocusError').classList.remove('hidden');
       // A failure after the comment was posted must not invite a second comment.
-      $('msFocusConfirm').disabled = /comment was posted/i.test(error.message);
+      $('msFocusConfirm').disabled = true;
     } finally {
       state.focusing.delete(id);
       renderReactions();
@@ -665,7 +686,16 @@ export function mountMusicScout() {
 
   async function ensureCatalog() {
     api('/api/auth-status').then(auth => {
+      const account = auth.connected ? (auth.id ?? 'connected') : null;
+      const changed = state.account !== undefined && state.account !== account;
+      state.account = account;
       state.auth = { connected: !!auth.connected, socialWrite: !!auth.socialWrite };
+      if (changed) {
+        state.token++; state.reacted.clear(); state.baseline.clear(); state.members.clear();
+        state.editableCollections = []; release(current); release(spare);
+        state.items = []; state.loading = null;
+        if (state.queue) selectQueue(state.queue, { force: true });
+      }
       const unknown = state.items.filter(item => !state.reacted.has(String(item.id)));
       for (let start = 0; start < unknown.length; start += PAGE) loadReactionState(unknown.slice(start, start + PAGE));
       const unchecked = state.items.filter(item => !membershipKnown(item));

@@ -442,13 +442,18 @@ with patch.object(server, "COLLECTALYTICS", stats), \
         FakeClient.writes, FakeClient.fail = [], {"comment"}
         status, answer = call("/api/collectalytics/accept",
                               body={"collectionId": OWNED, "collectionItemId": 9022, "template": template})
-        assert status == 502 and FakeClient.writes == [] and not answer.get("commented"), answer
+        assert status == 409 and FakeClient.writes == [] and answer.get("writeBlocked"), answer
+        status, answer = call("/api/collectalytics/accept", body={"collectionId": OWNED, "collectionItemId": 9022, "template": template})
+        assert status == 409 and answer.get("writeBlocked") and FakeClient.writes == [], answer
+        # New isolated fixture simulates a different fresh action.
+        server.COLLECTALYTICS.write_guard = __import__("discovery.write_guard", fromlist=["WriteGuard"]).WriteGuard()
         FakeClient.fail = {"status"}
         status, answer = call("/api/collectalytics/accept",
                               body={"collectionId": OWNED, "collectionItemId": 9022, "template": template})
         assert status == 502 and answer["commented"] is True and "Accept it on Civitai" in answer["error"], answer
         assert [write[0] for write in FakeClient.writes] == ["comment"], FakeClient.writes
         FakeClient.fail = set()
+        server.COLLECTALYTICS.write_guard = __import__("discovery.write_guard", fromlist=["WriteGuard"]).WriteGuard()
         # Civitai's own refusal without a comment is passed on.
         FakeClient.writes, FakeClient.fail = [], {"status"}
         status, answer = call("/api/collectalytics/accept",

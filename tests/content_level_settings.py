@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from discovery.settings import AppSettings
+from discovery.music_settings import DEFAULT_COLLECTIONS
 
 
 with tempfile.TemporaryDirectory(prefix="civitai-level-settings-") as temporary:
@@ -23,7 +24,10 @@ with tempfile.TemporaryDirectory(prefix="civitai-level-settings-") as temporary:
     def view(value):
         assert isinstance(value.get("captureSeed"), int), value
         assert value.get('mediaType') in ('all', 'image', 'video'), value
-        return {key: item for key, item in value.items() if key not in ('captureSeed', 'mediaType')}
+        assert value['musicCollections'] == DEFAULT_COLLECTIONS, value
+        assert value['communityEnabled'] is False and value['registryEnabled'] is False, value
+        return {key: item for key, item in value.items() if key not in (
+            'captureSeed', 'mediaType', 'musicCollections', 'communityEnabled', 'registryEnabled')}
 
     gallery_defaults = {"detailVideoSound": True, "applyTagFilters": True, "applyAccountFilters": True, "applyImageFilters": True, "hideHighVolumeCreators": True, "highVolumeThreshold": 50,
                         "emergingReactionMode": "balanced", "emergingReactionLimit": 0,
@@ -32,22 +36,22 @@ with tempfile.TemporaryDirectory(prefix="civitai-level-settings-") as temporary:
                         "captureCoverage": "X"}
 
     assert view(settings.load()) == {"contentRating": "Soft", "browsingLevels": [1, 2],
-                               "dimSeenCards": True, "checkForUpdates": True,
+                               "dimSeenCards": True, "checkForUpdates": False,
                                **gallery_defaults}
 
     path.write_text(json.dumps({"contentRating": "X", "autoCapture": True, "captureCoverage": "X"}), encoding="utf-8")
     assert view(settings.load()) == {"contentRating": "X", "browsingLevels": [1, 2, 4, 8, 16],
-                               "dimSeenCards": True, "checkForUpdates": True,
+                               "dimSeenCards": True, "checkForUpdates": False,
                                **gallery_defaults}
 
     saved = settings.update(browsing_levels_value=[16, 4])
     assert view(saved) == {"contentRating": "X", "browsingLevels": [4, 16],
-                     "dimSeenCards": True, "checkForUpdates": True, **gallery_defaults}
+                     "dimSeenCards": True, "checkForUpdates": False, **gallery_defaults}
     assert settings.load() == saved
 
     saved = settings.update(dim_seen_cards_value=False)
     assert view(saved) == {"contentRating": "X", "browsingLevels": [4, 16],
-                     "dimSeenCards": False, "checkForUpdates": True, **gallery_defaults}
+                     "dimSeenCards": False, "checkForUpdates": False, **gallery_defaults}
     saved = settings.update(check_for_updates_value=False)
     assert view(saved) == {"contentRating": "X", "browsingLevels": [4, 16],
                      "dimSeenCards": False, "checkForUpdates": False, **gallery_defaults}

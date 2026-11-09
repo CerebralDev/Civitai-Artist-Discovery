@@ -58,8 +58,8 @@ CHANNEL = CONFIG['channel']
 VERSION = CONFIG['version']
 ENVIRONMENT = CONFIG['environment']
 PROJECT_REF = CONFIG['projectRef']
-APPLICATION_ID = 'CivitaiDiscoveryBeta' if CHANNEL == 'beta' else 'CivitaiArtistDiscovery'
-APP_NAME = 'Civitai Discovery 3.0' + (' Beta' if CHANNEL == 'beta' else '')
+APPLICATION_ID = 'CerebralMusicDiscovery'
+APP_NAME = 'Civitai Music Discovery Preview'
 if CHANNEL == 'stable' and CONFIG['preview'] and ENVIRONMENT == 'development':
     APP_NAME += ' (Development Preview)'
 ENDPOINT = f'https://{PROJECT_REF}.supabase.co/functions/v1/community-v1'

@@ -17,11 +17,12 @@ class StableSource(unittest.TestCase):
         self.assertEqual(render(frozen=True,environment='production'),'')
         self.assertEqual(render(frozen=True,environment='development'),'')
         development=render(frozen=False,environment='development')
-        self.assertIn('Public Community needs the stable launch',development)
+        self.assertIn('Music Discovery development profile',development)
         self.assertIn('server.py --stable',development)
         self.assertIn('Your existing data will be kept',development)
         stable=render(frozen=False,environment='production')
-        self.assertIn('Public Community is selected',stable)
+        self.assertIn('Music Discovery Preview',stable)
+        self.assertIn('off by default',stable)
         self.assertNotIn('needs the stable launch',stable)
         for notice in (development,stable):self.assertIn('data-source-notice-dismiss',notice)
         from discovery.source_notice import pill
@@ -48,8 +49,8 @@ from discovery import paths
 os.environ.pop('CIVITAI_HISTORY_DATA_DIR',None)
 paths.application_root=lambda:Path(os.environ['CAD_TEST_SOURCE_PATH'])
 print(json.dumps({'data':str(paths.data_root())}))'''
-            self.assertEqual(Path(probe(code,environment={'CAD_TEST_SOURCE_PATH':folder})['data']),root/'data-production-3.0')
-            self.assertEqual(Path(probe(code,False,{'CAD_TEST_SOURCE_PATH':folder})['data']),root/'data-test-community')
+            self.assertEqual(Path(probe(code,environment={'CAD_TEST_SOURCE_PATH':folder})['data']),root/'data-music-discovery')
+            self.assertEqual(Path(probe(code,False,{'CAD_TEST_SOURCE_PATH':folder})['data']),root/'data-music-development')
 
     def test_default_source_remains_development(self):
         result=probe('from discovery.build_config import CONFIG;import json;print(json.dumps(CONFIG))',False)
@@ -111,7 +112,7 @@ with tempfile.TemporaryDirectory() as folder:
                         page.goto(base,wait_until='domcontentloaded')
                         page.locator('#appVersion').filter(has_text='v3.0.1').wait_for()
                         page.locator('#welcomeConnect').wait_for(state='visible')
-                        self.assertEqual(page.locator('#sourceLaunchTitle').inner_text(),'Public Community is selected')
+                        self.assertEqual(page.locator('#sourceLaunchTitle').inner_text(),'Music Discovery Preview')
                         page.locator('#sourceLaunchNotice').screenshot(path=str(test_safety.REPORTS/'source-stable-message.png'))
                         page.screenshot(path=str(test_safety.REPORTS/'source-stable-screen.png'),full_page=True)
                         for width in (390,1440):
@@ -159,7 +160,7 @@ with tempfile.TemporaryDirectory() as folder:
                         page=browser.new_page(viewport={'width':1440,'height':1000})
                         page.goto(base,wait_until='domcontentloaded')
                         page.locator('#welcomeConnect').wait_for(state='visible')
-                        self.assertEqual(page.locator('#sourceLaunchTitle').inner_text(),'Public Community needs the stable launch')
+                        self.assertEqual(page.locator('#sourceLaunchTitle').inner_text(),'Music Discovery development profile')
                         self.assertIn('server.py --stable',page.locator('#sourceLaunchNotice').inner_text())
                         self.assertEqual(page.locator('#appVersion + #appChannel').inner_text().lower(),'beta')
                         page.locator('#sourceLaunchNotice').screenshot(path=str(test_safety.REPORTS/'source-development-message.png'))

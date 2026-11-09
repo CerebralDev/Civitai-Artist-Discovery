@@ -96,3 +96,13 @@
 .ms-copy { border: 1px solid var(--line); background: #22242a; color: var(--text); padding: 5px 10px; border-radius: 7px; font-size: 12px; cursor: pointer; }
 .ms-copy:hover { background: var(--surface-raised); }
 dialog.ms-focus-dialog { width: min(580px, 92vw); }
+
+.music-settings { width: min(760px, calc(100vw - 24px)); max-height: 90dvh; overflow: auto; padding: 24px; }
+.music-settings form { display: grid; gap: 16px; }
+.music-settings fieldset { border: 1px solid var(--line); padding: 12px; min-width: 0; }
+.music-collection-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+.music-collection-row label { display: grid; gap: 6px; min-width: 0; }
+.music-collection-row label:nth-child(3) { grid-column: 1 / -1; }
+.music-collection-row input, .music-collection-row textarea { width: 100%; box-sizing: border-box; color: var(--text); background: var(--panel); border: 1px solid var(--line); padding: 8px; }
+#musicSettingsError { color: var(--danger-text); }
+@media(max-width: 540px) { .music-collection-row { grid-template-columns: 1fr; } .ms-options { flex-wrap: wrap; } }

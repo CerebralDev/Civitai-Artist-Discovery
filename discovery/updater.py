@@ -26,7 +26,7 @@ import urllib.request
 import zipfile
 
 
-REPOSITORY = "theevildarkmage-hue/Civitai-Artist-Discovery"
+REPOSITORY = "CerebralDev/Civitai-Artist-Discovery"
 RELEASES_URL = f"https://api.github.com/repos/{REPOSITORY}/releases?per_page=20"
 CHECK_INTERVAL = timedelta(hours=24)
 MAX_DOWNLOAD_BYTES = 500 * 1024 * 1024
@@ -515,7 +515,7 @@ class UpdateManager:
         self.install_root = Path(install_root).resolve()
         self.current_version = current_version
         self.executable = Path(executable or sys.executable).resolve()
-        self.supported = bool(getattr(sys, "frozen", False) if frozen is None else frozen)
+        self.supported = False  # Source fork: enable only after independently verified fork releases exist.
         self.cache_path = self.root / "check.json"
         self.result_path = self.root / "result.json"
         self.lock = threading.RLock()

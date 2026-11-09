@@ -41,6 +41,9 @@ class FakeArchive:
 
 
 class FakeClient:
+    @staticmethod
+    def _check_cooldown(): pass
+
     """The signed-in Civitai client, recording every write."""
     owner = True
     calls = []
@@ -75,7 +78,8 @@ class FakeClient:
         current.symmetric_difference_update({payload["reaction"]})
 
     def writable_image_collections(self, user_id):
-        owner = user_id if FakeClient.owner else user_id + 1
+        if not FakeClient.owner: return []
+        owner = user_id
         return [{"id": FOCUS, "userId": owner, "name": "Music Focus", "read": "Public"}]
 
     def image_collection_ids(self, image_ids):
@@ -128,8 +132,7 @@ scout = MusicScout(archive, social=lambda: server.music_scout_client())
 with patch.object(server, "MUSIC_SCOUT", scout), \
         patch.object(server, "auth_status", auth_status), \
         patch.object(server, "SocialClient", FakeClient), \
-        patch.object(server, "hidden_preferences", lambda: ({"hidden"}, {804})), \
-        patch.object(musicscout, "public_listing", side_effect=AssertionError("no hub reads here")):
+        patch.object(server, "hidden_preferences", lambda: ({"hidden"}, {804})):
     try:
         # -- catalog and public queues, signed out ------------------------------------
         status, catalog = call("GET", "/api/music/queues")
@@ -155,8 +158,8 @@ with patch.object(server, "MUSIC_SCOUT", scout), \
         assert call("GET", "/api/music/collection-status?imageId=801")[0] == 401
         assert call("GET", "/api/reaction-status?imageId=801")[0] == 401
         # Signed out, adding is refused cleanly rather than as a server fault.
-        status, answer = call("POST", "/api/music/focus", {"imageId": 803})
-        assert status == 403 and "owner" in answer["error"], (status, answer)
+        status, answer = call("POST", "/api/music/focus", {"collectionId": FOCUS, "imageId": 803})
+        assert status == 403 and "Sign in" in answer["error"], (status, answer)
 
         # -- viewed marks only for what was shown ---------------------------------------
         assert call("POST", "/api/music/viewed", {"imageId": 802})[0] == 400
@@ -170,6 +173,7 @@ with patch.object(server, "MUSIC_SCOUT", scout), \
 
         # -- signed in: reactions on a Music Scout video --------------------------------
         signed_in["value"] = True
+        assert call("GET", "/api/music/queue?queue=latest&limit=10")[0] == 200
         status, reactions = call("GET", "/api/reaction-status?imageId=801&imageId=803")
         assert status == 200 and set(reactions["images"]) == {"801", "803"}, reactions
         assert call("GET", "/api/reaction-status?imageId=999")[0] == 400
@@ -182,7 +186,7 @@ with patch.object(server, "MUSIC_SCOUT", scout), \
         # -- collection markers and ownership -------------------------------------------
         status, members = call("GET", "/api/music/collection-status?imageId=801&imageId=803")
         assert status == 200, members
-        assert members == {"canAdd": True, "collections": {
+        assert members == {"editableCollections": [FOCUS], "collections": {
             "music-focus": {"801": False, "803": True},
             "h3-museum": {"801": True, "803": False}}}, members
         assert call("GET", "/api/music/collection-status?imageId=999")[0] == 400
@@ -190,46 +194,33 @@ with patch.object(server, "MUSIC_SCOUT", scout), \
         # Already in: nothing is posted.
         FakeClient.held = {803: {FOCUS}}
         FakeClient.calls = []
-        status, added = call("POST", "/api/music/focus", {"imageId": 803})
+        status, added = call("POST", "/api/music/focus", {"collectionId": FOCUS, "imageId": 803})
         assert status == 200 and added["alreadyIn"] and not added["commented"], added
         assert FakeClient.calls == [], FakeClient.calls
 
-        # An upstream comment failure is actionable and never adds the video.
+        # Failure preserves intent. Refresh/retry cannot post a second comment.
         FakeClient.fail_comment = True
-        status, answer = call("POST", "/api/music/focus", {"imageId": 801})
-        assert status == 502 and "did not confirm your comment" in answer["error"], answer
-        assert "Check its comments" in answer["error"], answer
-        assert FakeClient.calls == [] and 801 not in FakeClient.held
+        status, answer = call("POST", "/api/music/focus", {"collectionId": FOCUS, "imageId": 801})
+        assert status == 409 and answer['writeBlocked'], answer
         FakeClient.fail_comment = False
+        status, answer = call("POST", "/api/music/focus", {"collectionId": FOCUS, "imageId": 801})
+        assert status == 409 and answer['writeBlocked'] and FakeClient.calls == [], answer
+        # A separate fresh operation succeeds once; duplicate submission is a membership no-op.
+        FakeClient.held = {}
+        status, added = call("POST", "/api/music/focus", {"collectionId": FOCUS, "imageId": 803})
+        assert status == 200 and added['commented'], added
+        assert [entry[0] for entry in FakeClient.calls] == ['comment', 'add'], FakeClient.calls
+        status, added = call("POST", "/api/music/focus", {"collectionId": FOCUS, "imageId": 803})
+        assert status == 200 and added['alreadyIn'], added
 
-        # A new add posts the default comment first, then adds.
-        status, added = call("POST", "/api/music/focus", {"imageId": 801})
-        assert status == 200 and added["inCollection"] and added["commented"], added
-        assert FakeClient.calls == [("comment", 801, MUSIC_FOCUS["commentHtml"]),
-                                    ("add", 801, FOCUS)], FakeClient.calls
-        assert FOCUS in FakeClient.held[801]
-        assert scout.collection_ids(FOCUS) == {801, 803}, "an add must update the markers at once"
-
-        # Comment posted but the add failed: said plainly, so nobody posts a second one.
-        FakeClient.held, FakeClient.calls, FakeClient.fail_add = {}, [], True
-        status, answer = call("POST", "/api/music/focus", {"imageId": 801})
-        assert status == 502 and "comment was posted" in answer["error"], answer
-        FakeClient.fail_add = False
-
-        # Both writes succeeded but the read-back failed: still a success.
-        FakeClient.calls, FakeClient.fail_readback = [], True
-        status, added = call("POST", "/api/music/focus", {"imageId": 801})
-        assert status == 200 and added["inCollection"], added
-        FakeClient.fail_readback = False
-
-        assert call("POST", "/api/music/focus", {"imageId": 999})[0] == 400
+        assert call("POST", "/api/music/focus", {"collectionId": FOCUS, "imageId": 999})[0] == 400
 
         # Anyone else sees the markers read-only and cannot add.
         server.MUSIC_FOCUS_OWNER.clear()
         FakeClient.owner = False
         status, members = call("GET", "/api/music/collection-status?imageId=801")
-        assert status == 200 and members["canAdd"] is False, members
-        status, answer = call("POST", "/api/music/focus", {"imageId": 801})
+        assert status == 200 and members["editableCollections"] == [], members
+        status, answer = call("POST", "/api/music/focus", {"collectionId": FOCUS, "imageId": 801})
         assert status == 403, answer
     finally:
         httpd.shutdown()

@@ -7,6 +7,10 @@ from discovery.community import SupabaseCommunityBackend,CommunityError
 
 SESSION='sdc_'+'s'*43
 class IdentitySessionTests(unittest.TestCase):
+    def setUp(self):
+        consent = patch('discovery.privacy.enabled', return_value=True)
+        consent.start(); self.addCleanup(consent.stop)
+
     def primary(self):
         return {'access_token':'civitai_write_canary','refresh_token':'civitai_refresh_canary','scope':917539,
             'client_id':'client','expires_at':2**31,'identity':{'id':7,'username':'Owner'}}

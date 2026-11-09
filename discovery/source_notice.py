@@ -21,16 +21,16 @@ def render(*, frozen, environment):
         return (
             '<aside id="sourceLaunchNotice" class="source-launch-notice" data-environment="production" '
             'aria-labelledby="sourceLaunchTitle">' + DISMISS +
-            '<strong id="sourceLaunchTitle">Public Community is selected</strong>'
-            '<p>This source session uses the public Community gallery and a separate local profile. '
-            'Use your Civitai account for shared recommendations.</p></aside>'
+            '<strong id="sourceLaunchTitle">Music Discovery Preview</strong>'
+            '<p>This fork uses its own local profile. Hosted Community and activity sharing are off by default. '
+            'Choose collections and optional participation under Music Scout → Collections &amp; privacy.</p></aside>'
         )
     return (
         '<aside id="sourceLaunchNotice" class="source-launch-notice source-launch-development" '
         'data-environment="development" aria-labelledby="sourceLaunchTitle">' + DISMISS +
-        '<strong id="sourceLaunchTitle">Public Community needs the stable launch</strong>'
-        '<p>This session uses the development version and a separate Community gallery. '
-        'To see the public gallery, close this app and run:</p>'
+        '<strong id="sourceLaunchTitle">Music Discovery development profile</strong>'
+        '<p>Hosted Community is off by default. If enabled, this profile uses the development service. '
+        'For the public service and a separate music profile, close this app and run:</p>'
         '<code>uv run --with-requirements requirements.txt server.py --stable</code>'
         '<p class="source-launch-alternative">Already installed the requirements? Use '
         '<code>python server.py --stable</code>.</p>'

@@ -25,6 +25,7 @@ import urllib.request
 from .models import base_labels, normalize_base_model
 
 MESSAGES = {
+    'LOCAL_DISABLED': 'Hosted Community is disabled. Enable it in Music collections and privacy if you want to participate.',
     "INVITE_ONLY": "Community Beta is Invite Only",
     "INVITE_REVOKED": "Your Community Beta invitation has been revoked.",
     "INVITE_EXPIRED": "Your Community Beta invitation has expired.",
@@ -241,6 +242,9 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 
 
 def bounded_json(url, token=None, body=None):
+    from .privacy import enabled
+    if urllib.parse.urlsplit(url).hostname and urllib.parse.urlsplit(url).hostname.endswith('.supabase.co') and not enabled('communityEnabled'):
+        raise CommunityError('LOCAL_DISABLED', 403)
     headers = {"Accept": "application/json", "User-Agent": "CivitaiDiscoveryBeta/3.0.0-beta.7"}
     if token:
         if not isinstance(token, str) or len(token) > 8192 or any(c.isspace() for c in token):

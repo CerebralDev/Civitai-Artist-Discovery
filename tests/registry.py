@@ -9,6 +9,10 @@ from discovery.registry import RegistryClient
 SESSION='sdc_'+'s'*43
 
 class RegistryTests(unittest.TestCase):
+    def setUp(self):
+        consent = patch('discovery.privacy.enabled', return_value=True)
+        consent.start(); self.addCleanup(consent.stop)
+
     def idle(self,client):
         for _ in range(200):
             if not client.active:return

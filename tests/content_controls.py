@@ -63,6 +63,10 @@ with tempfile.TemporaryDirectory(prefix="civitai-controls-", ignore_cleanup_erro
         db.execute("INSERT INTO days(day,complete,updated_at) VALUES(?,1,?)",
                    (day, datetime.now().isoformat()))
     history.build_artist_index(day)
+    # These are complete synthetic details. Never let the child server enrich
+    # the fixture through a real Civitai read while testing local tag controls.
+    with history.connect() as db:
+        db.execute('UPDATE images SET details_loaded=1')
 
     store = TasteStore(Path(temporary) / "discovery")
     # Tags come from the archive sweep, which is what makes tag hiding possible at all.

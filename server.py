@@ -33,6 +33,7 @@ from discovery.archive_calendar import build_request as archive_build_request
 from discovery.availability import ArtworkAvailability
 from discovery.timemachine import TimeMachine
 from discovery.musicscout import COLLECTIONS, MUSIC_FOCUS, HubBuilding, MusicScout
+from discovery.write_guard import WriteGuard, WriteBlocked
 from discovery.collectalytics import (Collectalytics, CommentedNotAccepted, NotListed,
                                       NotReviewable, NotWaiting, Unavailable, thumb_allowed,
                                       with_visible_thumbs)
@@ -82,9 +83,10 @@ CAPTURE = AutoCapture(HISTORY, SETTINGS)
 TIME_MACHINE = TimeMachine(DATA_ROOT / "discovery", HISTORY, TASTE)
 # In-memory video queues; they share the same paced request lane.
 MUSIC_SCOUT = MusicScout(HISTORY, social=lambda: music_scout_client(),
-                         root=DATA_ROOT / "discovery")
+                         root=DATA_ROOT / "discovery", collections=INITIAL_SETTINGS["musicCollections"])
 # Collection statistics, read on request and kept in memory for a few minutes.
-COLLECTALYTICS = Collectalytics(social=lambda: collectalytics_client())
+COMMENT_WRITES = WriteGuard(DATA_ROOT / "discovery" / "comment-outcomes.sqlite3")
+COLLECTALYTICS = Collectalytics(social=lambda: collectalytics_client(), write_guard=COMMENT_WRITES)
 WRITE_LOCK = threading.RLock()
 ARTWORK_AVAILABILITY = ArtworkAvailability()
 HISTORY.on_block_complete = lambda key, merged: prepare_finished_block(key, merged)
@@ -1118,8 +1120,8 @@ def artist_gallery(items: list[dict], limit: int, nonce: str) -> list[dict]:
 
 
 def log_internal_error(context: str, error: BaseException) -> None:
-    message = f"\n[{datetime.now(timezone.utc).isoformat()}] {context}: {type(error).__name__}\n{traceback.format_exc()}"
-    append_log(DATA_ROOT, message)
+    category = 'timeout' if isinstance(error, TimeoutError) else 'transport' if isinstance(error, OSError) else 'unexpected'
+    append_log(DATA_ROOT, category=category)
 
 
 def claim_single_instance(no_browser: bool, replacing: bool = False) -> bool:
@@ -1208,7 +1210,7 @@ def is_own_app_url(url: str) -> bool:
     host = (parsed.hostname or "").lower()
     if parsed.scheme != "http" or not port:
         return False
-    return host in {"127.0.0.1", "localhost", "::1"} or host in set(lan_addresses())
+    return host in {"127.0.0.1", "localhost", "::1"}
 
 
 def save_instance_url(url: str) -> None:
@@ -1305,6 +1307,8 @@ class Handler(BaseHTTPRequestHandler):
         if not self.path.startswith('/') or self.path.startswith('//'):
             self.send_error(400); return
         parsed = urllib.parse.urlparse(self.path)
+        if parsed.path.startswith('/api/music/'):
+            MUSIC_SCOUT.bind_account(connected_user_id())
         query = urllib.parse.parse_qs(parsed.query)
         if getattr(sys,'frozen',False) and (parsed.path.startswith(('/__dev/','/api/community/development/')) or parsed.path in ('/api/test-isolation','/community-fixture.svg')):
             self.send_error(404);return
@@ -1620,7 +1624,7 @@ class Handler(BaseHTTPRequestHandler):
                     raise ValueError("Only videos Music Scout has shown can be checked")
                 # One collection Civitai fails to list leaves only its icon unknown.
                 collections = {}
-                for collection in COLLECTIONS:
+                for collection in MUSIC_SCOUT.collections:
                     try: members = MUSIC_SCOUT.collection_ids(collection["collectionId"])
                     except Exception as error:
                         log_internal_error(f"{collection['name']} membership", error)
@@ -1628,9 +1632,14 @@ class Handler(BaseHTTPRequestHandler):
                     collections[collection["key"]] = {str(image_id): image_id in members
                                                       for image_id in image_ids}
                 # Adding is offered for Music Focus alone, and only to its owner.
-                try: editable = music_focus_editable()
-                except Exception: editable = False
-                self.json_response({"canAdd": editable, "collections": collections})
+                editable = []
+                grants = auth_status()
+                if grants.get('collectionsWrite'):
+                    allowed = {int(row['id']) for row in SocialClient().writable_image_collections(connected_user_id())}
+                    editable = [item['collectionId'] for item in MUSIC_SCOUT.collections
+                                if item['collectionId'] in allowed and
+                                (not item.get('commentHtml') or grants.get('socialWrite'))]
+                self.json_response({"editableCollections": editable, "collections": collections})
             except ValueError as error: self.json_response({"error": str(error)}, 400)
             except Exception as error: self.internal_error("Music Scout collection status", error)
             return
@@ -2112,7 +2121,8 @@ class Handler(BaseHTTPRequestHandler):
         if (self.headers.get("Content-Type") or "").split(";", 1)[0].strip().lower() != "application/json":
             raise ValueError("Content-Type must be application/json")
         length = int(self.headers.get("Content-Length") or 0)
-        if length < 2 or length > 8192:
+        limit = 131072 if urllib.parse.urlsplit(self.path).path == '/api/settings' else 8192
+        if length < 2 or length > limit:
             raise ValueError("Invalid request size")
         value = json.loads(self.rfile.read(length))
         if not isinstance(value, dict):
@@ -2140,6 +2150,8 @@ class Handler(BaseHTTPRequestHandler):
         if not self.host_allowed() or not browser_request_allowed(self.headers):
             self.send_error(403); return
         parsed = urllib.parse.urlparse(self.path)
+        if parsed.path.startswith('/api/music/'):
+            MUSIC_SCOUT.bind_account(connected_user_id())
         try:
             body = self.request_json()
             if getattr(sys,'frozen',False) and parsed.path.startswith(('/__dev/','/api/community/development/')):
@@ -2245,8 +2257,13 @@ class Handler(BaseHTTPRequestHandler):
                                         high_volume_threshold_value=body.get("highVolumeThreshold"),
                                         emerging_reaction_mode_value=body.get("emergingReactionMode"),
                                         emerging_reaction_limit_value=body.get("emergingReactionLimit"),
-                                        allow_lan_access_value=body.get("allowLanAccess"))
+                                        allow_lan_access_value=body.get("allowLanAccess"),
+                                        music_collections_value=body.get("musicCollections"),
+                                        community_enabled_value=body.get("communityEnabled"),
+                                        registry_enabled_value=body.get("registryEnabled"))
+                MUSIC_SCOUT.configure(value['musicCollections'])
                 if content_change or gallery_change:
+                    MUSIC_SCOUT.invalidate()
                     with WRITE_LOCK:
                         ORDER_CACHE.clear()
                         # Visibility is cached separately for each exact level selection,
@@ -2498,53 +2515,53 @@ class Handler(BaseHTTPRequestHandler):
                 self.json_response({"imageId": image_id, "viewed": True})
                 return
             if parsed.path == "/api/music/focus":
-                # Adding only, always with the owner's default comment. A different
-                # comment, and any removal, is done on Civitai itself.
-                if not music_focus_editable():
-                    raise PermissionError("Only the owner of Music Focus can add to it")
+                if not connected_or_false():
+                    raise PermissionError("Sign in to save videos to a collection")
+                collection_id = int(body.get("collectionId"))
+                configured = next((item for item in MUSIC_SCOUT.collections
+                                   if item['collectionId'] == collection_id), None)
+                if configured is None:
+                    raise ValueError("Choose a configured collection")
+                grants = auth_status()
+                if not grants.get('collectionsWrite') or (configured['commentHtml'] and not grants.get('socialWrite')):
+                    raise PermissionError('Civitai has not granted the permissions for this action')
                 image_id = int(body.get("imageId"))
                 if not MUSIC_SCOUT.served_entry(image_id):
                     raise ValueError("Only videos Music Scout has shown can be saved")
+                account = connected_user_id()
                 client = SocialClient()
-                collection = music_focus_collection(client)
+                client.expected_account = account
+                collection = next((item for item in client.writable_image_collections(account)
+                                   if int(item['id']) == collection_id), None)
                 if collection is None:
-                    raise PermissionError("Only the owner of Music Focus can add to it")
-                held = client.image_collection_ids([image_id]).get(image_id) or set()
-                if collection["id"] in held:
-                    MUSIC_SCOUT.mark_member(MUSIC_FOCUS["collectionId"], image_id)
+                    raise PermissionError("Civitai does not permit adding to this collection")
+                held = client.image_collection_ids([image_id]).get(image_id)
+                if held is None:
+                    raise ValueError("Could not verify existing membership. Review the video on Civitai.")
+                if collection_id in held:
+                    MUSIC_SCOUT.mark_member(collection_id, image_id)
                     self.json_response({"imageId": image_id, "inCollection": True,
                                         "commented": False, "alreadyIn": True})
                     return
-                # The comment goes first: a video must not land in the collection without
-                # one. If the add then fails, say so plainly rather than retrying, which
-                # would post the comment twice.
+                key = COMMENT_WRITES.key(account, 'add', collection_id, image_id)
                 try:
-                    client.comment_on_image(image_id, MUSIC_FOCUS["commentHtml"])
-                except Exception as error:
-                    log_internal_error("Music Focus comment before add", error)
-                    self.json_response({"error": "Civitai did not confirm your comment. The video "
-                                        "was not added to Music Focus. Check its comments on "
-                                        "Civitai before trying again."}, 502)
-                    return
-                try:
+                    client._check_cooldown()
+                    COMMENT_WRITES.begin(key)
+                    comment = configured['commentHtml']
+                    if comment:
+                        client.comment_on_image(image_id, comment)
+                        COMMENT_WRITES.mark(key, 'commented')
                     client.add_image_to_collection(image_id, collection)
+                    COMMENT_WRITES.mark(key, 'done')
                 except Exception as error:
-                    log_internal_error("Music Focus add after comment", error)
-                    self.json_response({"error": "Your comment was posted, but adding the video "
-                                        "to Music Focus failed. Add it on Civitai."}, 502)
+                    log_internal_error("Music collection action", error)
+                    self.json_response({"error": "This collection action may be partly complete. "
+                                        "Review and finish it on Civitai; it will not be posted again here.",
+                                        "writeBlocked": True}, 409)
                     return
-                # Both writes succeeded, so a failed read-back must not report an error:
-                # the reader would retry an add that already happened.
-                try:
-                    held = client.image_collection_ids([image_id]).get(image_id)
-                except Exception as error:
-                    log_internal_error("Music Focus confirm after add", error)
-                    held = None
-                in_collection = True if held is None else collection["id"] in held
-                if in_collection:
-                    MUSIC_SCOUT.mark_member(MUSIC_FOCUS["collectionId"], image_id)
-                self.json_response({"imageId": image_id, "inCollection": in_collection,
-                                    "commented": True, "alreadyIn": False})
+                MUSIC_SCOUT.mark_member(collection_id, image_id)
+                self.json_response({"imageId": image_id, "inCollection": True,
+                                    "commented": bool(comment), "alreadyIn": False})
                 return
             if parsed.path == "/api/collectalytics/comment-preview":
                 # Renders the comment from the queue already read; nothing is sent to Civitai.
@@ -2570,6 +2587,8 @@ class Handler(BaseHTTPRequestHandler):
                     self.json_response({"error": str(error)}, 404); return
                 except (NotWaiting, NotReviewable) as error:
                     self.json_response({"error": str(error)}, 409); return
+                except WriteBlocked as error:
+                    self.json_response({"error": str(error), "writeBlocked": True}, 409); return
                 except CommentedNotAccepted as error:
                     log_internal_error("Collectalytics accept after comment", error.__cause__ or error)
                     self.json_response({"error": str(error), "commented": True}, 502); return
@@ -2741,9 +2760,9 @@ def main() -> None:
     args = parser.parse_args()
     from discovery.community_security import disable_test_outbound
     disable_test_outbound(DATA_ROOT)
-    bind_host = args.host or ("0.0.0.0" if SETTINGS.load()['allowLanAccess'] else "127.0.0.1")
-    if bind_host not in ('127.0.0.1','0.0.0.0') or (bind_host=='0.0.0.0' and not SETTINGS.load()['allowLanAccess']) or args.port in (8906,33101,33201):
-        raise ValueError("Network binding requires explicit LAN sharing; use a separate Discovery 3.0 port")
+    bind_host = args.host or "127.0.0.1"
+    if bind_host != '127.0.0.1' or args.port in (8906,33101,33201):
+        raise ValueError("This build supports loopback access only; choose a separate local port")
     if not claim_single_instance(args.no_browser, args.replacing):
         return
     if not SETTINGS.path.exists():SETTINGS.update()
@@ -2791,6 +2810,8 @@ def main() -> None:
         server.server_close()
         try: HISTORY.checkpoint()
         except Exception as error: log_internal_error("SQLite shutdown checkpoint", error)
+        try: MUSIC_SCOUT.close()
+        except Exception as error: log_internal_error("Music history shutdown", error)
         clear_instance_url(url)
 
 

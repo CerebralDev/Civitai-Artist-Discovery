@@ -6,6 +6,7 @@ import secrets
 import threading
 
 from .selection import media_type
+from .music_settings import DEFAULT_COLLECTIONS, normalize_collections
 from .build_config import CHANNEL
 from .site import (CONTENT_RATINGS, DEFAULT_CONTENT_RATING, browsing_levels, content_rating,
                    levels_for_rating, rating_for_levels)
@@ -66,7 +67,7 @@ class AppSettings:
             detail_video_sound = raw.get("detailVideoSound", True)
             if not isinstance(detail_video_sound, bool):
                 detail_video_sound = True
-            check_for_updates = raw.get("checkForUpdates", True)
+            check_for_updates = raw.get("checkForUpdates", False)
             if not isinstance(check_for_updates, bool):
                 check_for_updates = True
             hide_high_volume = raw.get("hideHighVolumeCreators", True)
@@ -99,7 +100,7 @@ class AppSettings:
             seed = raw.get("captureSeed")
             if not isinstance(seed, int) or not 0 <= seed < 2**31:
                 seed = secrets.randbelow(2**31)
-            allow_lan_access = raw.get("allowLanAccess", False)
+            allow_lan_access = False  # Fork remains loopback-only until authenticated LAN sessions exist.
             if not isinstance(allow_lan_access, bool):
                 allow_lan_access = False
             # What unattended collection downloads, kept apart from the viewing filter.
@@ -118,7 +119,14 @@ class AppSettings:
                     capture_coverage = rating_for_levels(levels)
                     if raw.get("contentRating") is not None:
                         capture_coverage = min((rating, capture_coverage), key=CONTENT_RATINGS.index)
-            return {"mediaType": raw.get("mediaType") if raw.get("mediaType") in ("all", "image", "video") else "all",
+            try:
+                music_collections = normalize_collections(raw.get('musicCollections', DEFAULT_COLLECTIONS))
+            except ValueError:
+                music_collections = []
+            return {"musicCollections": music_collections,
+                    "communityEnabled": raw.get('communityEnabled') is True,
+                    "registryEnabled": raw.get('registryEnabled') is True,
+                    "mediaType": raw.get("mediaType") if raw.get("mediaType") in ("all", "image", "video") else "all",
                     "contentRating": rating_for_levels(levels),
                     "browsingLevels": list(levels),
                     "applyTagFilters": apply_tag_filters,
@@ -178,8 +186,18 @@ class AppSettings:
                auto_capture_hours_value: object = None,
                auto_capture_minute_value: object = "keep",
                allow_lan_access_value: object = None,
-               capture_coverage_value: object = None) -> dict:
+               capture_coverage_value: object = None,
+               music_collections_value: object = None,
+               community_enabled_value: object = None,
+               registry_enabled_value: object = None) -> dict:
         current = self.load()
+        if music_collections_value is not None:
+            current['musicCollections'] = normalize_collections(music_collections_value)
+        for key, value in [('communityEnabled', community_enabled_value), ('registryEnabled', registry_enabled_value)]:
+            if value is not None:
+                if type(value) is not bool:
+                    raise ValueError(key + ' must be true or false')
+                current[key] = value
         if browsing_levels_value is not None:
             levels = browsing_levels(browsing_levels_value)
         elif content_rating_value is not None:
@@ -245,13 +263,16 @@ class AppSettings:
         seed = current["captureSeed"]
         allow_lan_access = (current["allowLanAccess"] if allow_lan_access_value is None
                             else allow_lan_access_value)
-        if not isinstance(allow_lan_access, bool):
-            raise ValueError("allowLanAccess must be true or false")
+        if allow_lan_access is not False:
+            raise ValueError("This build supports access from this device only")
         capture_coverage = (current["captureCoverage"] if capture_coverage_value is None
                             else capture_coverage_value)
         if capture_coverage not in CONTENT_RATINGS:
             raise ValueError("captureCoverage must be Soft, Mature, or X")
-        value = {"mediaType": media_type(current["mediaType"] if media_type_value is None else media_type_value),
+        value = {"musicCollections": current['musicCollections'],
+                 "communityEnabled": current['communityEnabled'],
+                 "registryEnabled": current['registryEnabled'],
+                 "mediaType": media_type(current["mediaType"] if media_type_value is None else media_type_value),
                  "contentRating": rating_for_levels(levels),
                  "browsingLevels": list(levels),
                  "applyTagFilters": apply_tag_filters,

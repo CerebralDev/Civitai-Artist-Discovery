@@ -210,7 +210,9 @@ with tempfile.TemporaryDirectory() as folder:
     assert not any(item["viewed"] for item in page["items"]), page
     first.mark_viewed(501)
     assert "viewed" not in first.served_entry(501), "the shared entry must not carry the flag"
-    again = MusicScout(FakeArchive(pages), root=Path(folder)).page("latest", 0, 10)
+    second = MusicScout(FakeArchive(pages), root=Path(folder))
+    again = second.page("latest", 0, 10)
+    second.close()
     assert [item["viewed"] for item in again["items"]] == [False, True, False, False], again
     first.viewed_db.close()
 
@@ -240,7 +242,7 @@ import discovery.musicscout as musicscout
 with tempfile.TemporaryDirectory() as folder:
     archive = HubArchive()
     # The first build reads in parallel outside the lane; route it to the same fake.
-    musicscout.public_listing = lambda params: archive._request(params)[0]
+    # All hub reads now use the archive lane directly.
     hub = MusicScout(archive, social=lambda: HubSocial(), root=Path(folder))
     try:
         hub.page("mf-hub", 0, 10, per_creator=2)
@@ -292,7 +294,7 @@ with tempfile.TemporaryDirectory() as folder:
         cursor = f"feed:{int((_time.time() - 7200) * 1000)}:1"
         return {"items": [fresh, stranger], "metadata": {"nextCursor": cursor}}
 
-    musicscout.public_listing = feed
+    later.archive._request = lambda params: (feed(params), 100)
     caught = later.page("mf-hub", 0, 10, per_creator=1, refresh=True)
     assert [item["id"] for item in caught["items"]] == [950, 911], caught["items"]
     assert feed_calls == [None], feed_calls
@@ -313,7 +315,7 @@ with tempfile.TemporaryDirectory() as folder:
         return {"items": [row(960 + len(feed_calls), "Zed", 1)],
                 "metadata": {"nextCursor": f"feed:{int(_time.time() * 1000)}:{len(feed_calls)}"}}
 
-    musicscout.public_listing = endless
+    later.archive._request = lambda params: (endless(params), 100)
     try:
         later.page("mf-hub", 0, 10, per_creator=1, refresh=True)
     except HubBuilding:

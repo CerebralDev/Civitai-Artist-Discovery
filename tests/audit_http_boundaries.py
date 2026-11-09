@@ -52,7 +52,7 @@ with tempfile.TemporaryDirectory(prefix='cad3-audit-http-', ignore_cleanup_error
             assert request('POST', '/api/settings', '{}', {'Origin': origin, 'Content-Type': 'application/json'})[0] == 403, origin
         for mime in ['text/plain', 'application/json-evil']:
             assert request('POST', '/api/settings', '{}', {'Content-Type': mime})[0] == 400
-        assert request('POST', '/api/settings', '{}', {'Content-Type': 'application/json', 'Content-Length': '8193'})[0] == 400
+        assert request('POST', '/api/settings', '{}', {'Content-Type': 'application/json', 'Content-Length': '131073'})[0] == 400
         assert request('POST', '/api/settings', '{bad', {'Content-Type': 'application/json'})[0] == 400
         status, headers, body = request('POST', '/api/settings', json.dumps({'dimSeenCards': False}),
             {'Origin': f'http://127.0.0.1:{port}', 'Content-Type': 'application/json; charset=utf-8'})

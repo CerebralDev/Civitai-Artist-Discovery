@@ -20,7 +20,7 @@ try:
    page.goto(h.base,wait_until='networkidle')
    page.get_by_role('button',name='Community Beta',exact=True).wait_for()
    page.wait_for_function('()=>document.querySelector(".app-logo").complete&&document.querySelector(".app-logo").naturalWidth>0')
-   assert page.locator('h1').inner_text()=='Civitai Discovery 3.0 Beta'
+   assert page.locator('h1').inner_text()=='Civitai Music Discovery Preview'
    assert page.locator('#appVersion').inner_text().startswith('v3.')
    assert page.locator('.app-logo').get_attribute('alt')==''
    for tab in ('tabCommunity','tabGallery','tabTimeMachine','tabMusicScout','tabCollectalytics','tabDiscovery'):

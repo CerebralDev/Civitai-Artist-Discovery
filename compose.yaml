@@ -28,7 +28,7 @@ services:
       # Stable Production data, apart from data-dev-3.0/ (Development beta) and 2.x data/.
       # Kept as data-3.0/ rather than --stable's data-production-3.0/ default so existing
       # container profiles and their keyring entry carry over.
-      CIVITAI_HISTORY_DATA_DIR: /app/data-3.0
+      CIVITAI_HISTORY_DATA_DIR: /app/data-music-discovery
     volumes:
       - ${XDG_RUNTIME_DIR:?run this from your desktop session}/bus:/run/host-bus
-      - ./data-3.0:/app/data-3.0
+      - ./data-music-discovery:/app/data-music-discovery

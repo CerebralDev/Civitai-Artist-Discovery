@@ -18,7 +18,9 @@ from v2_visual_baseline import ROOT, StaticHandler, install_fixture
 
 from discovery.musicscout import MusicScout
 
-CATALOG = MusicScout.catalog()
+catalog_scout = MusicScout(None)
+CATALOG = catalog_scout.catalog()
+catalog_scout.close()
 TOTAL = 30
 VIEWED = {7001, 7002}
 FOCUS_MEMBER = {7004}
@@ -76,7 +78,7 @@ def music_routes(route):
         data = {"imageId": body["imageId"], "viewed": True}
     elif path == "/api/music/collection-status":
         ids = query["imageId"]
-        data = {"canAdd": True, "collections": {
+        data = {"editableCollections": [17980935], "collections": {
             "music-focus": {value: int(value) in FOCUS_MEMBER for value in ids},
             "h3-museum": {value: False for value in ids}}}
     elif path == "/api/music/focus":

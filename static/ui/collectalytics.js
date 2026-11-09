@@ -491,10 +491,10 @@ export function mountCollectalytics() {
     } catch (error) {
       acceptError(error.message);
       // Once the comment is out, a second try would post it again.
-      if (/comment was posted/i.test(error.message)) {
+      if (error.writeBlocked || /comment was posted|will not be posted again/i.test(error.message)) {
         target.posted = true;
         row.querySelector('.ca-accept')?.remove();
-        row.querySelector('.ca-review-actions').append(element('small', 'ca-review-error', 'Comment posted; accept it on Civitai.'));
+        row.querySelector('.ca-review-actions').append(element('small', 'ca-review-error', 'Review this action on Civitai before continuing.'));
         return;
       }
       $('caAcceptConfirm').disabled = false;

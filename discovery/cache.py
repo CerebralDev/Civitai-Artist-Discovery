@@ -279,13 +279,15 @@ class ThumbnailCache:
                 if key.casefold() not in ('host','content-length')}),timeout=6)
         with response:
             kind=response.headers.get_content_type()
+            if kind not in ('image/jpeg','image/png','image/webp','image/avif'):
+                raise ValueError('Invalid thumbnail content type')
             if redirected or allow_downscale:
                 # Legacy CDN links sometimes resolve to originals. Read only a
                 # bounded header first and accept images already thumbnail-sized.
                 import io
                 from PIL import Image
                 head=response.read(65536)
-                with Image.open(io.BytesIO(head)) as header:
+                with Image.open(io.BytesIO(head), formats=('JPEG','PNG','WEBP','AVIF')) as header:
                     width,height=header.size
                 if allow_downscale and (width*height>16_000_000 or max(width,height)>8192):
                     raise ValueError('Source exceeds thumbnail decode limit')
@@ -298,7 +300,7 @@ class ThumbnailCache:
         if allow_downscale:
             import io
             from PIL import Image,ImageOps
-            with Image.open(io.BytesIO(body)) as original:
+            with Image.open(io.BytesIO(body), formats=('JPEG','PNG','WEBP','AVIF')) as original:
                 if original.width*original.height>16_000_000:raise ValueError('Source exceeds thumbnail decode limit')
                 preview=ImageOps.exif_transpose(original)
                 preview.thumbnail((512,1024),Image.Resampling.LANCZOS)
