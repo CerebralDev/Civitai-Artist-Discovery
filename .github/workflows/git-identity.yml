@@ -1,4 +1,4 @@
-name: Git identity privacy
+name: Source hygiene and owner identity privacy
 on:
   pull_request_target:
     types: [opened, synchronize, reopened, ready_for_review]
@@ -9,8 +9,27 @@ on:
 permissions:
   contents: read
 jobs:
+  source:
+    name: source-hygiene
+    # PR-target events must never execute proposed code. This public check covers
+    # committed pushes, schedules and explicit runs; the owner audit handles PRs.
+    if: github.event_name != 'pull_request_target'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          fetch-tags: false
+          persist-credentials: false
+      - name: Check public source without private policy or credentials
+        run: python3 scripts/check-source.py
   audit:
     name: git-identity-privacy
+    # This audit requires the original owner's private identity policy. Preserve
+    # it for that repository; forks do not inherit or retrieve its secret values.
+    if: github.repository == 'theevildarkmage-hue/Civitai-Artist-Discovery'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

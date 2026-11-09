@@ -8,7 +8,7 @@ separate temporary profiles and ports. An additional socket guard blocked non-lo
 test traffic. No real credentials, account reads, comments, reactions or collection
 changes were used. Browser tests demonstrate mocked behavior, not live Civitai acceptance.
 
-The final targeted selection contains **32 passing suites, zero skips**. The first
+The final targeted selection contains **34 passing suites, zero skips**. The first
 32-suite pass had two assertion failures: old app naming and old settings defaults.
 Those expectations were corrected, retaining content-setting preservation and layout
 assertions, and both suites passed in a separate rerun. Earlier failing run receipts
@@ -20,6 +20,12 @@ remain local rather than being overwritten.
 | Writes, cooldowns and diagnostics | `social_comments`, `read_retry_correctness`, `api_failure_diagnostics`, `browser_diagnostics`, `community_safe_diagnostics` |
 | Content controls and layout | `resource_bounds`, `content_control_recovery`, `content_filter_toggles_http`, `content_controls`, `content_level_settings`, `content_filter_cache`, `community_filters_browser`, `header_polish_browser`, `time_machine_ui` |
 | Identity, persistence and boundaries | `oauth_identity`, `oauth_storage`, `oauth_refresh_race`, `oauth_disconnect`, `registry`, `lan_security`, `source_hygiene`, `persistence_cache`, `audit_http_boundaries`, `security_smoke`, `stable_source` |
+| Synthetic identity-policy regression checks | `git_identity_guard`, `personal_identity_privacy` |
+
+The two additional identity suites contain 28 Git/hook cases and 16 personal-data
+redaction cases. The Git-hook suite first encountered the host's Windows Store Python
+alias; rerunning with the isolated environment's Python first on the test PATH passed.
+These tests use synthetic private policies, never the original author's private data.
 
 `music_reliability` contains 18 focused cases: durable partial/uncertain outcomes,
 concurrent journal instances, account separation and account-pinned writes, comment
@@ -48,8 +54,14 @@ and hosted service deployments were outside that dependency scan.
 
 The upstream release identity-policy tooling is retained. Its full publication gates,
 installer/update simulation matrix and all other pre-existing suites outside the
-32 listed above were not rerun. No fork binary build, installer, release upload,
+34 listed above were not rerun. No fork binary build, installer, release upload,
 native Linux/Podman run or automatic update installation was performed.
+
+Post-push CI exposed an inherited deployment prerequisite: the author's Git identity
+audit needs a private policy unavailable in this fork. That job is now restricted to
+the original repository, with a separate credential-free source-hygiene job for this
+fork's committed pushes, schedules and manual runs. This is not a substitute for the
+author's private identity audit or the unexecuted release gate.
 
 ## Data integrity and outstanding acceptance
 

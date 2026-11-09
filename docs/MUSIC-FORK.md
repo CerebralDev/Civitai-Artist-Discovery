@@ -116,4 +116,9 @@ hosted opt-in acceptance remain user checks. No Windows installer or executable 
 published by this source update. The author's release packaging/privacy-policy tooling
 is retained; independently publishing binaries needs a fork-specific release process.
 
+The inherited Git identity workflow requires the original author's private policy.
+That job is scoped to the original repository. This fork runs the credential-free
+public source-hygiene gate on pushes, schedules and manual workflow runs; it does not
+claim a private identity audit or execute proposed code on PR-target events.
+
 See [verification record](MUSIC-VERIFICATION.md) for exact suites and remaining limits.
