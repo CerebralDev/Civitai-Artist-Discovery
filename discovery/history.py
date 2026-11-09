@@ -264,6 +264,10 @@ def video_playback_url(url: str, width: int = 450) -> str:
     return _cdn_transform(url, f"transcode=true,width={width},optimized=true")
 
 
+def video_original_url(url: str) -> str:
+    return _cdn_transform(url, "original=true")
+
+
 class HistoryArchive:
     @staticmethod
     def archive_key(value: str, segment: str = "all") -> str:
@@ -962,38 +966,10 @@ class HistoryArchive:
     def _record_api_failure(self, params: dict, kind: str, *, status: int | None = None,
                             reason: object = None, headers: object = None,
                             body: bytes = b"") -> None:
-        """Keep bounded, credential-free upstream diagnostics for later support."""
-        safe_headers = {}
-        for name in ("Content-Type", "Content-Encoding", "Retry-After", "CF-Ray",
-                     "X-Request-Id", "X-Correlation-Id", "Server"):
-            try:
-                value = headers.get(name) if headers else None
-            except (AttributeError, TypeError):
-                value = None
-            if value:
-                safe_headers[name] = str(value)[:300]
-        encoding = safe_headers.get("Content-Encoding", "").casefold()
-        if body and encoding == "gzip":
-            excerpt = f"[gzip-compressed response; {len(body)} bytes captured]"
-        else:
-            excerpt = body.decode("utf-8", errors="replace") if body else ""
-            excerpt = "".join(character if character in "\r\n\t" or ord(character) >= 32 else " "
-                              for character in excerpt)
-            # The public image endpoint should not return credentials, but redact common
-            # secret-shaped fields before anything reaches disk as a defense in depth.
-            excerpt = redact_sensitive(excerpt)
-            excerpt = excerpt[:API_FAILURE_BODY_BYTES]
-        context = {name: params.get(name) for name in
-                   ("backend", "limit", "offset", "sort", "period", "browsingLevel", "withMeta")
-                   if params.get(name) is not None}
-        if params.get("filter"):
-            context["filter"] = [str(value)[:200] for value in params["filter"][:8]]
-        if params.get("cursor"):
-            context["cursor"] = str(params["cursor"])[:160]
-        record = {"timestamp": utcnow(), "kind": kind, "status": status,
-                  "reason": str(reason or "")[:500], "request": context,
-                  "headers": safe_headers, "bodyExcerpt": excerpt,
-                  "bodyTruncated": len(body) > API_FAILURE_BODY_BYTES}
+        """Persist fixed operation/category/status only; discard raw server and request data."""
+        kind = kind if kind in {'http','network','search_http','search_network'} else 'other'
+        status = status if type(status) is int and 100 <= status <= 599 else None
+        record = {'timestamp': utcnow(), 'kind': kind, 'status': status}
         line = (json.dumps(record, ensure_ascii=False) + "\n").encode("utf-8")
         try:
             self.api_failure_log.parent.mkdir(parents=True, exist_ok=True)
@@ -1051,6 +1027,7 @@ class HistoryArchive:
                     self.thumbnail_hints.capture(payload, params.get("browsingLevel"))
                     return payload, len(raw)
             except urllib.error.HTTPError as error:
+                self.api_lane.observe_http(error.code, (error.headers or {}).get("Retry-After"))
                 if on_timing:
                     on_timing("response", time.monotonic() - started)
                 try:
@@ -1144,6 +1121,7 @@ class HistoryArchive:
                         raise SearchBackendUnavailable("Civitai search returned an invalid response")
                     return payload, len(raw)
             except urllib.error.HTTPError as error:
+                self.api_lane.observe_http(error.code, (error.headers or {}).get("Retry-After"))
                 if on_timing:
                     on_timing("response", time.monotonic() - started)
                 try:

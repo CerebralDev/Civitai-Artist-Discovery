@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from discovery.settings import AppSettings
+from discovery.music_settings import DEFAULT_COLLECTIONS
 
 
 with tempfile.TemporaryDirectory(prefix="civitai-level-settings-") as temporary:
@@ -23,31 +24,34 @@ with tempfile.TemporaryDirectory(prefix="civitai-level-settings-") as temporary:
     def view(value):
         assert isinstance(value.get("captureSeed"), int), value
         assert value.get('mediaType') in ('all', 'image', 'video'), value
-        return {key: item for key, item in value.items() if key not in ('captureSeed', 'mediaType')}
+        assert value['musicCollections'] == DEFAULT_COLLECTIONS, value
+        assert value['communityEnabled'] is False and value['registryEnabled'] is False, value
+        return {key: item for key, item in value.items() if key not in (
+            'captureSeed', 'mediaType', 'musicCollections', 'communityEnabled', 'registryEnabled')}
 
-    gallery_defaults = {"detailVideoSound": True, "hideHighVolumeCreators": True, "highVolumeThreshold": 50,
+    gallery_defaults = {"detailVideoSound": True, "applyTagFilters": True, "applyAccountFilters": True, "applyImageFilters": True, "hideHighVolumeCreators": True, "highVolumeThreshold": 50,
                         "emergingReactionMode": "balanced", "emergingReactionLimit": 0,
                         "autoCapture": True, "autoCaptureHours": 12,
                         "autoCaptureMinute": None, "allowLanAccess": False,
                         "captureCoverage": "X"}
 
     assert view(settings.load()) == {"contentRating": "Soft", "browsingLevels": [1, 2],
-                               "dimSeenCards": True, "checkForUpdates": True,
+                               "dimSeenCards": True, "checkForUpdates": False,
                                **gallery_defaults}
 
     path.write_text(json.dumps({"contentRating": "X", "autoCapture": True, "captureCoverage": "X"}), encoding="utf-8")
     assert view(settings.load()) == {"contentRating": "X", "browsingLevels": [1, 2, 4, 8, 16],
-                               "dimSeenCards": True, "checkForUpdates": True,
+                               "dimSeenCards": True, "checkForUpdates": False,
                                **gallery_defaults}
 
     saved = settings.update(browsing_levels_value=[16, 4])
     assert view(saved) == {"contentRating": "X", "browsingLevels": [4, 16],
-                     "dimSeenCards": True, "checkForUpdates": True, **gallery_defaults}
+                     "dimSeenCards": True, "checkForUpdates": False, **gallery_defaults}
     assert settings.load() == saved
 
     saved = settings.update(dim_seen_cards_value=False)
     assert view(saved) == {"contentRating": "X", "browsingLevels": [4, 16],
-                     "dimSeenCards": False, "checkForUpdates": True, **gallery_defaults}
+                     "dimSeenCards": False, "checkForUpdates": False, **gallery_defaults}
     saved = settings.update(check_for_updates_value=False)
     assert view(saved) == {"contentRating": "X", "browsingLevels": [4, 16],
                      "dimSeenCards": False, "checkForUpdates": False, **gallery_defaults}
@@ -64,7 +68,7 @@ with tempfile.TemporaryDirectory(prefix="civitai-level-settings-") as temporary:
                             high_volume_threshold_value=200,
                             emerging_reaction_mode_value="strict",
                             emerging_reaction_limit_value=500)
-    gallery_saved = {"detailVideoSound": True, "hideHighVolumeCreators": True, "highVolumeThreshold": 200,
+    gallery_saved = {"detailVideoSound": True, "applyTagFilters": True, "applyAccountFilters": True, "applyImageFilters": True, "hideHighVolumeCreators": True, "highVolumeThreshold": 200,
                      "emergingReactionMode": "strict", "emergingReactionLimit": 500,
                      "autoCapture": True, "autoCaptureHours": 12,
                      "autoCaptureMinute": None, "allowLanAccess": False,
@@ -88,6 +92,16 @@ with tempfile.TemporaryDirectory(prefix="civitai-level-settings-") as temporary:
     chosen = AppSettings(path.with_name("chosen.json"))
     chosen.update(capture_coverage_value="X", content_rating_value="Soft")
     assert chosen.update(content_rating_value="Mature")["captureCoverage"] == "X"
+
+    # Each switch persists independently without altering the imported controls.
+    switches = AppSettings(path.with_name('switches.json'))
+    paused = switches.update(apply_tag_filters_value=False)
+    assert paused['applyTagFilters'] is False and paused['applyAccountFilters'] is True
+    assert AppSettings(switches.path).load() == paused
+    paused = switches.update(apply_tag_filters_value=True, apply_account_filters_value=False)
+    assert paused['applyTagFilters'] is True and paused['applyAccountFilters'] is False
+    paused = switches.update(apply_image_filters_value=False)
+    assert AppSettings(switches.path).load()['applyImageFilters'] is False
 
     try:
         settings.update(browsing_levels_value=[])

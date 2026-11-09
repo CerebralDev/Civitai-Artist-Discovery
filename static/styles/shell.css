@@ -4,6 +4,18 @@ body { background: var(--bg); }
   border-left: 4px solid #73d6c8; border-radius: var(--radius-md);
   background: #1d302f; color: var(--text); line-height: 1.5;
 }
+.source-launch-notice { position: relative; padding-right: 52px; }
+.source-launch-dismiss {
+  position: absolute; top: 8px; right: 8px; width: 32px; height: 32px; padding: 0;
+  border: 0; border-radius: var(--radius-sm); background: transparent; color: inherit; font-size: 20px; line-height: 1;
+}
+.source-launch-dismiss:hover { background: rgba(255, 255, 255, .08); }
+.app-channel {
+  flex: none; padding: 2px 7px; border: 1px solid; border-radius: 999px; font-size: 10px; font-weight: 750;
+  line-height: 1.35; letter-spacing: .025em; white-space: nowrap; text-transform: uppercase;
+}
+.app-channel-public { border-color: #478b85; background: #1d302f; color: #a5eee3; }
+.app-channel-beta { border-color: #8e7642; background: #302b21; color: #f4d89f; }
 .source-launch-notice strong { display: block; color: #a5eee3; font-size: 17px; }
 .source-launch-notice p { margin: 7px 0 0; }
 .source-launch-notice > code { display: block; margin-top: 10px; padding: 10px 12px; border-radius: 6px; background: #141f20; }
@@ -11,7 +23,7 @@ body { background: var(--bg); }
 .source-launch-alternative { color: #c3cece; font-size: 13px; }
 .source-launch-development { border-color: #8e7642; border-left-color: #e9bd6d; background: #302b21; }
 .source-launch-development strong { color: #f4d89f; }
-@media (max-width: 700px) { .source-launch-notice { margin: 10px 12px; padding: 14px; } }
+@media (max-width: 700px) { .source-launch-notice { margin: 10px 12px; padding: 14px 48px 14px 14px; } }
 :where(button, a, input, select, summary):focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 3px;
@@ -40,6 +52,23 @@ body > .app-header { min-height: 64px; padding: 10px 20px; gap: 20px; background
 .gallery-navigation #selectedDate { font-size: 14px; }
 .gallery-navigation #summary { margin-left: auto; font-size: 12px; }
 .command-bar .segment-toolbar { position: static; top: auto; flex: 1 1 auto; min-width: 0; padding: 0; justify-content: flex-end; flex-wrap: nowrap; background: transparent; border: 0; backdrop-filter: none; gap: 8px; }
+/* When the tabs leave less room than the calendar, view and filters controls
+   need, those controls take their own row rather than being squeezed under one another. */
+@media (min-width: 701px) {
+  .view-tabs.command-bar { flex-wrap: wrap; }
+  .command-bar .segment-toolbar { flex-basis: 360px; }
+  /* The result summary gives way first; it already truncates. */
+  .command-bar .segment-toolbar > :not(.active-filters) { flex-shrink: 0; }
+}
+/* Narrow windows above the phone layout: tighter tabs keep all six on one row, and
+   below 900px the labels alone, since the icons no longer fit beside them. */
+@media (min-width: 701px) and (max-width: 1099px) {
+  .view-tabs > button { padding: 6px 8px; gap: 5px; font-size: 13px; }
+}
+@media (min-width: 701px) and (max-width: 899px) {
+  .view-tabs.command-bar { padding-inline: 12px; gap: 4px; }
+  .view-tabs > button > svg.ui-icon { display: none; }
+}
 .segment-toolbar label { margin-left: 0; }
 .ui-field { display: inline-flex; align-items: center; gap: 8px; min-width: 0; max-width: 100%; }
 .segment-toolbar select, .filter-button { min-height: 36px; border-radius: var(--radius-sm); }

@@ -9,6 +9,7 @@ import time
 import secrets
 from collections import OrderedDict
 from urllib.parse import urlsplit, urlunsplit
+from .runtime_redaction import redact_personal
 
 
 LOG_LOCK = threading.Lock()
@@ -33,12 +34,13 @@ def community_failure(root, operation, error):
         _COMMUNITY_RECENT[key]=(now,correlation);_COMMUNITY_RECENT.move_to_end(key)
         while len(_COMMUNITY_RECENT)>64:_COMMUNITY_RECENT.popitem(last=False)
     stamp=datetime.now(timezone.utc).isoformat()
-    append_log(Path(root),f'[{stamp}] Community operation={operation} category={category} diagnostic={correlation}\n')
+    append_log(Path(root),event=operation,category=category)
     return correlation
 
 
 def redact_sensitive(message: str) -> str:
     """Best-effort defense against credentials echoed by upstream error pages."""
+    message = redact_personal(message)
     message = re.sub(r'(?i)\b(Bearer|Basic)\s+[A-Za-z0-9._~+/=-]+', r'\1 [redacted]', message)
     keys = r'access[_-]?token|refresh[_-]?token|client[_-]?secret|authorization|api[_-]?key|password'
     message = re.sub(r'''(?i)(\b(?:''' + keys + r''')\b["']?\s*[:=]\s*)(["'])(?:\\.|(?!\2)[^\r\n])*\2''',
@@ -50,8 +52,13 @@ def redact_sensitive(message: str) -> str:
                   r'\1[redacted]', message)
 
 
-def append_log(root: Path, message: str) -> None:
-    message = redact_sensitive(message)
+def append_log(root: Path, message: str = '', *, event='local_error', category='unexpected') -> None:
+    # Never persist caller-provided text: it may include response content or account data.
+    allowed = EVENTS | COMMUNITY_OPERATIONS | {'local_error'}
+    event = event if event in allowed else 'local_error'
+    category = category if category in {'timeout', 'transport', 'invalid_response', 'unexpected', 'browser'} else 'unexpected'
+    message = json.dumps({'timestamp': datetime.now(timezone.utc).isoformat(),
+                          'event': event, 'category': category}) + '\n'
     try:
         with LOG_LOCK:
             root.mkdir(parents=True, exist_ok=True)
@@ -67,24 +74,8 @@ def append_log(root: Path, message: str) -> None:
 def log_browser_events(root: Path, events: object) -> None:
     if not isinstance(events, list) or not 1 <= len(events) <= 10:
         raise ValueError('Provide 1 to 10 diagnostic events')
-    records = []
     for event in events:
         if not isinstance(event, dict) or event.get('event') not in EVENTS:
             raise ValueError('Unknown diagnostic event')
-        record = {'event': event['event']}
-        for name, limit in (('reason', 100), ('username', 80), ('date', 10),
-                            ('segment', 10), ('surface', 30)):
-            if isinstance(event.get(name), str):
-                record[name] = event[name][:limit]
-        image_id = event.get('imageId')
-        if str(image_id).isdigit() and 0 < int(image_id) < 2 ** 63:
-            record['imageId'] = int(image_id)
-        try:
-            url = urlsplit(str(event.get('url') or ''))
-            if url.scheme == 'https' and url.hostname == 'image.civitai.com':
-                record['url'] = urlunsplit(('https', url.hostname, url.path[:400], '', ''))
-        except ValueError:
-            pass
-        stamp = datetime.now(timezone.utc).isoformat()
-        records.append(f'[{stamp}] Browser diagnostic: {json.dumps(record, ensure_ascii=False)}\n')
-    append_log(root, ''.join(records))
+    for event in events:
+        append_log(root, event=event['event'], category='browser')

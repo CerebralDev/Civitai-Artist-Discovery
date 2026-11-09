@@ -14,6 +14,7 @@ from .flatjson import unwrap_result
 from .oauth import get_access_token, refresh_access_token, status
 from .retry import retry_after_seconds
 from .diagnostics import redact_sensitive
+from .civitai import API_LANE
 
 
 BASE_URL = "https://civitai.red"
@@ -40,6 +41,7 @@ class SocialClient:
         # everything else reaching Civitai. Left unset for anything a reader is waiting
         # on, which must not queue behind a collection's rate-limit backoff.
         self.lane = lane
+        self.expected_account = None
 
     def public_model_version(self, model_version_id: int) -> dict:
         for attempt in range(3):
@@ -60,6 +62,7 @@ class SocialClient:
 
     def _public_model_version_once(self, model_version_id: int) -> dict:
         """Resolve a public model-version id without sending the OAuth token."""
+        self._check_cooldown()
         request = urllib.request.Request(
             f"{BASE_URL}/api/v1/model-versions/{int(model_version_id)}",
             headers={"Accept": "application/json",
@@ -69,6 +72,7 @@ class SocialClient:
             with urllib.request.urlopen(request, timeout=20) as response:
                 value = json.loads(response.read())
         except urllib.error.HTTPError as error:
+            API_LANE.observe_http(error.code, (error.headers or {}).get('Retry-After'))
             detail = redact_sensitive(error.read(4096).decode("utf-8", "replace"))[:600]
             raise CivitaiHTTPError(
                 error.code, f"Civitai returned HTTP {error.code}: {detail}",
@@ -78,7 +82,15 @@ class SocialClient:
         return value
 
     def _request(self, request: urllib.request.Request) -> object:
+        self._check_cooldown()
         token = get_access_token()
+        if self.expected_account is not None:
+            from .oauth import _load, _REFRESH_LOCK
+            with _REFRESH_LOCK:
+                current = _load()
+                if (current.get('identity', {}).get('id') != self.expected_account
+                        or current.get('access_token') != token):
+                    raise PermissionError('The connected account changed. Reopen this collection.')
         request.add_unredirected_header("Authorization", f"Bearer {token}")
         request.add_header("Accept", "application/json")
         request.add_header("User-Agent", "CivitaiArtistDiscovery/1.0 (local Windows artist discovery app; user-requested reads)")
@@ -97,6 +109,7 @@ class SocialClient:
                     self.lane.pacer.failure("rate_limited")
                 elif error.status >= 500:
                     self.lane.pacer.failure("service_retry")
+                self.lane.observe_http(error.status, error.retry_after)
                 raise
             except (TimeoutError, urllib.error.URLError):
                 self.lane.pacer.failure("network_retry")
@@ -111,16 +124,21 @@ class SocialClient:
         refreshed = False
         for attempt in range(attempts):
             try:
+                self._check_cooldown()
                 return self._send(request)
             except CivitaiHTTPError as error:
+                API_LANE.observe_http(error.status, error.retry_after)
                 if read and error.status == 401 and not refreshed and attempt + 1 < attempts:
-                    request.add_unredirected_header('Authorization', f'Bearer {refresh_access_token(token)}')
+                    renewed = refresh_access_token(token)
+                    if self.expected_account is not None and status().get('id') != self.expected_account:
+                        raise PermissionError('The connected account changed. Reopen this collection.')
+                    request.add_unredirected_header('Authorization', f'Bearer {renewed}')
                     refreshed = True
                     continue
                 if not read or self.lane is not None or error.status not in (429, 500, 502, 503, 504) or attempt + 1 == attempts:
                     raise
                 delay = retry_after_seconds(error.retry_after)
-                delay = delay if delay is not None else 2 ** attempt
+                delay = delay if delay is not None else (60 if error.status == 429 else 2 ** attempt)
                 # Long server pauses belong to background scheduling or a later user retry.
                 if delay > 30:
                     raise
@@ -131,11 +149,19 @@ class SocialClient:
             time.sleep(delay + random.uniform(0, .5))
 
     @staticmethod
+    def _check_cooldown():
+        remaining = API_LANE.cooldown()
+        if remaining > 0:
+            raise CivitaiHTTPError(429, 'Civitai requests are cooling down. Try again later.', str(remaining))
+
+    @staticmethod
     def _send(request: urllib.request.Request) -> object:
         try:
             with urllib.request.urlopen(request, timeout=20) as response:
                 return json.loads(response.read())
         except urllib.error.HTTPError as error:
+            # Observe status/headers before touching an HTML or malformed body.
+            API_LANE.observe_http(error.code, (error.headers or {}).get('Retry-After'))
             if error.code == 404 and getattr(request, '_optional_image_batch', False):
                 # tRPC returns HTTP 404 for an all-missing read batch. Admit only
                 # explicit per-image NOT_FOUND envelopes, never a proxy/plain 404.
@@ -266,6 +292,40 @@ class SocialClient:
             "type": "Image", "imageId": int(image_id), "collections": [selected],
             "removeFromCollectionIds": [],
         })
+
+    def comment_on_image(self, image_id: int, content: str) -> object:
+        """Post one comment. ``content`` is the HTML Civitai's own editor produces."""
+        result = self.mutate("commentv3.create", {
+            "entityId": int(image_id), "entityType": "image", "content": content,
+        })
+        if not isinstance(result, dict) or type(result.get('id')) is not int or result['id'] <= 0:
+            raise RuntimeError('Civitai did not confirm the comment. Review it on Civitai.')
+        return result
+
+    def set_collection_items_status(self, collection_id: int, collection_item_ids: list[int],
+                                    status: str) -> object:
+        """Accept or reject items in a collection the account owns or manages."""
+        return self.mutate("collection.updateCollectionItemsStatus", {
+            "collectionId": int(collection_id),
+            "collectionItemIds": [int(value) for value in collection_item_ids],
+            "status": status,
+        })
+
+    def image_collection_ids(self, image_ids: list[int]) -> dict[int, set[int] | None]:
+        """Which of the account's collections hold each image; None where Civitai has no record.
+
+        Any other per-item failure raises for the whole batch, like batch_query_optional.
+        """
+        values = self.batch_query_optional("collection.getUserCollectionItemsByItem",
+                                           [{"type": "Image", "imageId": int(value)} for value in image_ids])
+        result: dict[int, set[int] | None] = {}
+        for image_id, value in zip(image_ids, values):
+            if not isinstance(value, list):
+                result[int(image_id)] = None
+                continue
+            result[int(image_id)] = {int(row["collectionId"]) for row in value
+                                     if isinstance(row, dict) and row.get("collectionId")}
+        return result
 
     def hide_user(self, user_id: int, username: str | None = None) -> object:
         """Add one creator to the connected account's Civitai Content Controls."""

@@ -12,6 +12,7 @@ import time
 import urllib.parse
 import urllib.error
 import urllib.request
+from .retry import retry_after_seconds
 
 
 from .site import API_URL, image_url
@@ -92,9 +93,20 @@ class RequestLane:
         return 0.0
 
     def defer(self, seconds: float) -> None:
-        """Share a bounded upstream 429 pause without owning all retry sleeps."""
+        """Retain the server deadline even when a caller exhausts its retry budget."""
         with self.lock:
-            self.not_before=max(self.not_before,time.monotonic()+max(0,min(602,seconds)))
+            self.not_before=max(self.not_before,time.monotonic()+max(0,seconds))
+
+    def cooldown(self) -> float:
+        with self.lock:
+            return max(0.0, self.not_before - time.monotonic())
+
+    def observe_http(self, status, retry_after=None):
+        delay = retry_after_seconds(retry_after)
+        if status == 429:
+            self.defer(delay if delay is not None else 60.0)
+        elif status >= 500 and delay is not None:
+            self.defer(delay)
 
 
 # Shared by the collection engine and every background sweep in this process.

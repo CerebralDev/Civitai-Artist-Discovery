@@ -1,5 +1,5 @@
 // One transport contract for all pages. Callers may pass AbortSignal via options.
-const controlsChannel = typeof BroadcastChannel === 'function' ? new BroadcastChannel('discovery-content-controls-v1') : null;
+const controlsChannel = typeof BroadcastChannel === 'function' ? new BroadcastChannel('music-discovery-content-controls-v1') : null;
 if (controlsChannel) controlsChannel.onmessage = ({data}) => {
   if (data?.phase === 'changing') window.dispatchEvent(new Event('content-controls-changing'));
   if (data?.phase === 'changed') {
@@ -10,6 +10,7 @@ if (controlsChannel) controlsChannel.onmessage = ({data}) => {
 };
 export function finishControlChange(settings=null, artistHidden=false) {
   controlsChannel?.postMessage({phase:'changed',settings,artistHidden});
+  if (settings) window.dispatchEvent(new CustomEvent('shared-settings-changed', {detail:settings}));
   window.dispatchEvent(new Event('community-controls-changed'));
   if(artistHidden)window.dispatchEvent(new Event('shared-artist-hidden'));
 }
@@ -32,10 +33,10 @@ export async function api(url, options = {}) {
     // Retries belong to bounded server reads; never replay a browser mutation.
     const response = await fetch(url, { ...request, headers, signal: controller.signal });
     const body = await response.json().catch(() => null);
-    if (!response.ok) throw Object.assign(new Error(body?.error || `The app returned HTTP ${response.status}. Try again shortly.`), {code:body?.code,status:response.status});
+    if (!response.ok) throw Object.assign(new Error(body?.error || `The app returned HTTP ${response.status}. Try again shortly.`), {code:body?.code,status:response.status,writeBlocked:body?.writeBlocked === true});
     if (body === null) throw new Error('The app returned an unreadable response. Please try again.');
     succeeded = true;
-    if (controlChange && url === '/api/settings') settings = {browsingLevels:body.browsingLevels,contentRating:body.contentRating};
+    if (controlChange && url === '/api/settings') settings = {browsingLevels:body.browsingLevels,contentRating:body.contentRating,applyTagFilters:body.applyTagFilters,applyAccountFilters:body.applyAccountFilters,applyImageFilters:body.applyImageFilters,musicCollections:body.musicCollections};
     return body;
   } catch (error) {
     if (timedOut) throw Object.assign(new Error('The request timed out. Your saved gallery is safe; please try again.'), {code:'UNAVAILABLE',status:503});

@@ -27,7 +27,7 @@ client = social.SocialClient()
 with (
     patch.object(social, "get_access_token", return_value="fake"),
     patch.object(social, "refresh_access_token", return_value="fresh") as refresh,
-    patch.object(social.time, "sleep"),
+    patch.object(social.time, "sleep", side_effect=lambda seconds: setattr(social.API_LANE, "not_before", 0)),
     patch.object(
         client,
         "_send",
@@ -58,6 +58,7 @@ for failure in [
     social.CivitaiHTTPError(503, "Unavailable"),
     TimeoutError("timeout"),
 ]:
+    social.API_LANE.not_before = 0
     client = social.SocialClient()
     request = urllib.request.Request(social.BASE_URL, data=b"{}", method="POST")
     with (
@@ -82,10 +83,12 @@ for failure in [
         format_datetime(datetime.now(timezone.utc) + timedelta(seconds=10)),
     ),
 ]:
+    social.API_LANE.not_before = 0
     client = social.SocialClient()
+    social.API_LANE.not_before = 0
     with (
         patch.object(social, "get_access_token", return_value="fake"),
-        patch.object(social.time, "sleep") as sleep,
+        patch.object(social.time, "sleep", side_effect=lambda seconds: setattr(social.API_LANE, "not_before", 0)) as sleep,
         patch.object(
             client, "_send", side_effect=[failure, failure, {"ok": True}]
         ) as send,
@@ -96,9 +99,10 @@ for failure in [
             assert sleep.call_args[0][0] >= 2
             if failure.retry_after != "2":
                 assert sleep.call_args[0][0] >= 8
+    social.API_LANE.not_before = 0
     with (
         patch.object(social, "get_access_token", return_value="fake"),
-        patch.object(social.time, "sleep"),
+        patch.object(social.time, "sleep", side_effect=lambda seconds: setattr(social.API_LANE, "not_before", 0)),
         patch.object(client, "_send", side_effect=failure) as send,
     ):
         try:
@@ -115,6 +119,7 @@ with tempfile.TemporaryDirectory(
     from discovery.taste import TasteStore
 
     store = TasteStore(Path(temporary) / "discovery")
+    social.API_LANE.not_before = 0
     client = social.SocialClient()
     client._request = lambda request: [
         {"error": {"json": {"message": "Temporary", "data": {"httpStatus": 503}}}}

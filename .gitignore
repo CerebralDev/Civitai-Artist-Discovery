@@ -9,6 +9,7 @@
 # Repository entry points
 !.gitignore
 !README.md
+!UPSTREAM-README.md
 !AGENTS.md
 !CONTRIBUTING.md
 !LICENSE
@@ -16,6 +17,14 @@
 !requirements-dev.txt
 !requirements.txt
 !server.py
+
+# Linux container image (podman compose up --build)
+!compose.yaml
+!.containerignore
+!container/
+container/*
+!container/Containerfile
+!container/*.py
 
 # Portable runtime data lives beside the executable/source checkout.
 data/
@@ -52,6 +61,8 @@ docs/*
 !docs/beta-release.md
 !docs/release-notes.md
 !docs/updates.md
+!docs/MUSIC-FORK.md
+!docs/MUSIC-VERIFICATION.md
 !docs/time-machine-spec.md
 !docs/2.0-project-plan.md
 !docs/2.0-progress.md
@@ -135,3 +146,10 @@ dev/community-test-lab/*
 
 # Read-only candidate artwork acceptance helper; contains no credentials.
 !scripts/verify-public-artwork.mjs
+
+# Git identity privacy enforcement.
+!.githooks/*
+!.github/
+!.github/workflows/
+!.github/workflows/git-identity.yml
+!.gitattributes

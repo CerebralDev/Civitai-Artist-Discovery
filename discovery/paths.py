@@ -29,18 +29,5 @@ def data_root() -> Path:
     override = os.environ.get(DATA_DIR_ENV)
     if override:
         return Path(override)
-    if getattr(sys,'frozen',False):
-        return application_root() / 'data'
     from .build_config import ENVIRONMENT
-    if ENVIRONMENT == 'production':
-        # Never reuse the Development selection or its identity/device credentials.
-        return application_root() / 'data-production-3.0'
-    selection=application_root()/'.data-directory-3.0.json'
-    if selection.exists():
-        value=json.loads(selection.read_text(encoding='utf-8'))['directory']
-        chosen=(application_root()/value).resolve()
-        if application_root().resolve() not in chosen.parents:
-            raise ValueError('3.0 data directory must remain inside this workspace')
-        return chosen
-    # 3.0 development must never migrate the user's installed 2.x data or tokens.
-    return application_root() / "data-dev-3.0"
+    return application_root() / ('data-music-discovery' if ENVIRONMENT == 'production' else 'data-music-development')

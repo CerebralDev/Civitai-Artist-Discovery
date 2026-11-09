@@ -18,6 +18,9 @@ class RegistryClient:
         with self.lock:self.due.pop(identity.get('id'),None)
 
     def authenticated(self,identity,token_provider):
+        from .privacy import enabled
+        if not enabled('registryEnabled'):
+            return False
         # A background launch alone never enters this path. This ID only scopes
         # the local retry budget; the hosted handler independently verifies it.
         key=identity.get('id')
@@ -31,6 +34,7 @@ class RegistryClient:
             self.due[key]=now+7200
         def run():
             try:
+                if not enabled('registryEnabled'):return
                 from .community import bounded_json
                 token=token_provider()
                 from .cloud_identity import SESSION

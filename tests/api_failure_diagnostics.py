@@ -58,16 +58,11 @@ with tempfile.TemporaryDirectory(prefix="civitai-api-diagnostics-") as temporary
         assert len(lines) == history.CHECKPOINTED_RETRY_ATTEMPTS, len(lines)
         record = json.loads(lines[-1])
         assert record["status"] == 503 and record["kind"] == "http", record
-        assert record["headers"]["Retry-After"] == "1", record
-        assert record["headers"]["CF-Ray"] == "diagnostic-ray", record
-        assert record["request"]["browsingLevel"] == 16, record
-        assert "upstream query timed out" in record["bodyExcerpt"], record
-        assert "must-not-survive" not in record["bodyExcerpt"], record
-        assert "[redacted]" in record["bodyExcerpt"], record
+        assert set(record) == {'timestamp', 'status', 'kind'}, record
+        assert 'must-not-survive' not in str(lines) and 'saved-public-cursor' not in str(lines)
+        assert 'upstream query timed out' not in str(lines)
     finally:
         history.urllib.request.urlopen = real_urlopen
         history.random.uniform = real_uniform
 
-print({"httpStatusRecorded": True, "safeHeadersRecorded": True,
-       "bodyExcerptRecorded": True, "credentialsRedacted": True,
-       "requestContextRecorded": True, "retryLimitStillApplied": True})
+print({'fixedStatusAndCategoryOnly': True, 'retryLimitStillApplied': True})

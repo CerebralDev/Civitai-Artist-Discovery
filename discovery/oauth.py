@@ -372,11 +372,14 @@ def login(timeout: int = 300) -> dict:
 def _login(timeout: int = 300) -> dict:
     # Cloud outages must not prevent local login or access to Daily Gallery.
     from . import cloud_identity
+    from .privacy import enabled
+    opted_in = enabled('communityEnabled')
     pending=None
-    try:
-        pending=cloud_identity.challenge(client_id())
-    except Exception as error:
-        failure=error
+    if opted_in:
+        try:
+            pending=cloud_identity.challenge(client_id())
+        except Exception as error:
+            failure=error
     tokens=_authorize_tokens(READ_SCOPE | USER_WRITE | COLLECTIONS_READ | COLLECTIONS_WRITE | SOCIAL_WRITE,
         timeout,nonce=pending['nonce'] if pending else None)
     identity=_userinfo(tokens['access_token'])
@@ -384,7 +387,7 @@ def _login(timeout: int = 300) -> dict:
     if identity_id<=0:raise OAuthSetupError('Civitai did not return a verifiable account identity.')
     tokens['identity']={'id':identity_id,'username':identity.get('username') or identity.get('preferred_username')}
     assertion=tokens.pop('id_token',None)
-    if not pending:_enrollment_failure(tokens,'challenge',failure)
+    if opted_in and not pending:_enrollment_failure(tokens,'challenge',failure)
     # Never persist or forward the token endpoint dictionary. Only its signed ID
     # assertion may enter the exchange; access/refresh credentials stay local.
     if pending:
@@ -396,6 +399,9 @@ def _login(timeout: int = 300) -> dict:
 
 def reconnect_community(timeout=300):
     """Explicit fresh nonce authorization. Never silently replace another account."""
+    from .privacy import enabled
+    if not enabled('communityEnabled'):
+        raise OAuthSetupError('Enable hosted Community in Music collections and privacy first.')
     from . import cloud_identity
     from .diagnostics import community_failure
     with _AUTHORIZATION_LOCK:
@@ -434,6 +440,9 @@ def reconnect_community(timeout=300):
         return tokens['identity']
 
 def community_authorization(tokens):
+    from .privacy import enabled
+    if not enabled('communityEnabled'):
+        return {'state': 'disabled', 'reason': 'local_opt_out', 'action': 'none', 'communityEnrolled': False}
     import re
     from .cloud_identity import SESSION
     active=client_id()
@@ -479,6 +488,9 @@ _CLOUD_RETRY={}
 
 def get_community_session() -> str:
     """Renew Discovery authorization independently; never clear/refresh Civitai here."""
+    from .privacy import enabled
+    if not enabled('communityEnabled'):
+        raise OAuthSetupError('Hosted Community is disabled in local privacy settings.')
     from .cloud_identity import SESSION
     from . import cloud_identity
     def load():

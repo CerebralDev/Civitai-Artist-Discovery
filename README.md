@@ -1,457 +1,89 @@
-# Civitai Artist Discovery
+# Civitai Music Discovery Preview
 
-## Production stable 3.0.1
+An independent music/video discovery fork of **Civitai Artist Discovery**, with
+configurable collection feeds, collection statistics and guarded curation actions.
+It runs separately from Civitai Companion and uses its own profile.
 
-The published stable Windows release connects to Production Community. Normal
-Civitai sign-in automatically enrolls verified users; no invitation or separate
-registration is required. The separate activity Registry remains disabled.
+Based on the [original project](https://github.com/theevildarkmage-hue/Civitai-Artist-Discovery)
+and [bno84's music work](https://github.com/bno84/Civitai-Artist-Discovery/tree/dev-v3).
+This is a community project, not an official Civitai product.
 
-**Linux/source users:** use `python server.py --stable` after installing runtime
-dependencies, or `uv run --with-requirements requirements.txt server.py --stable`.
-This explicitly selects stable 3.0.1, the reviewed Production services, and a
-separate local profile. Plain `python server.py` remains the beta/Development
-source entry point, including a local Community ledger by default. Checking out a
-stable tag alone does not select Production. See [Linux stable source setup](docs/3.0-linux-stable-source.md).
+## What is included
 
-For this source fix, update to current `main` (or current `development/3.0`), then
-launch with `--stable`. The original `v3.0.0` tag is immutable and does not contain
-the fix. Updated source launches show a notice explaining the selected Community
-mode and, when needed, the command for switching to public Community. This applies
-to Windows source users as well as Linux; the published Windows ZIP already has
-the correct Production configuration.
+- Music Scout: videos with sound, keyboard navigation, saved viewing progress,
+  music-model-attributed queues and a per-creator cap.
+- Configurable Civitai collections, each with a video queue and a creator feed.
+- Optional comments when saving a video, reviewed before sending; leave the
+  comment blank to save without posting.
+- Collectalytics: collection statistics, creator breakdowns, additions over time,
+  known video duration, copyable summaries and submission review.
+- The original artist browser, local history, taste profile and content controls.
+- Current upstream privacy/recovery improvements plus stricter decoder, logging,
+  consent, cooldown and duplicate-comment protections.
 
-[Release notes](docs/3.0-stable-release-notes.md) ·
-[Changelog](docs/3.0-changelog.md) · [Privacy](docs/3.0-privacy.md) ·
-[Install/upgrade/rollback](docs/3.0-stable-installation.md) ·
-[Launch approval sequence](docs/3.0-public-launch.md).
-Privacy/data deletion: [theevildarkmage@gmail.com](mailto:theevildarkmage@gmail.com),
-confirmed by the owner for public listing. Security reports continue through
-[GitHub private vulnerability reporting](SECURITY.md).
+## Run from source
 
-## Windows beta 3.0.0-beta.13
-
-The published Windows beta includes recommendation previews, shared Community
-cards and filtering, static video posters, artwork-based video visibility, and
-clearer multi-image indicators. Community remains invitation-only; stable 2.2.1
-uses its separate update channel. PR #12's filter switches and PR #22's analytics
-remain deferred. See the [release notes](docs/3.0-beta-release-notes.md).
-
-Local stable-readiness work prepares the next bridge beta and stable packaging;
-it is not a published stable release or a Production activation. Supported build,
-full test and recovery commands are in the [readiness guide](docs/3.0-stable-readiness.md).
-Candidate [Windows installation/upgrade instructions](docs/3.0-stable-installation.md)
-and the [Production handoff checklist](docs/3.0-production-handoff.md) distinguish
-local acceptance from the remaining live integration and publication steps.
-
-Current follow-up decisions: [Beta 11 audit and decision tracker](docs/3.0-audit-tracker.md#october-27-2026-decision-record).
-The October 27 record separates conditional recovery maintenance from accepted
-cache behavior, monitored lookup costs and intentionally retained renewal. It does
-not authorize application changes or a new release. Older candidate notes below
-are historical; see the dated tracker for the accepted Beta 11 baseline.
-
-Suspected vulnerabilities: use [private security reporting](SECURITY.md).
-General support and non-sensitive maintenance remain in GitHub Issues.
-
-## Beta authenticated activity notice
-
-Discovery 3.0 Beta automatically records your verified Civitai account ID, public
-username, first-seen and last-seen timestamps, app version, and platform in its
-private Supabase registry after server-side identity verification. Authentication
-uses a signed Civitai identity proof and a Discovery-only session; user
-Civitai API access and refresh tokens remain local. This supports
-beta usage and compatibility monitoring. Activity updates occur at most once every
-12 hours. The registry stores no OAuth tokens or browsing history, is not publicly
-searchable, and does not grant Community access. To request deletion, contact the
-maintainer through [GitHub Issues](https://github.com/theevildarkmage-hue/Civitai-Artist-Discovery/issues)
-for general support. Do not post tokens, account details or sensitive deletion/security
-requests publicly. Sensitive privacy/deletion requests use the owner-confirmed
-theevildarkmage@gmail.com; security uses GitHub private vulnerability reporting.
-Later authenticated use can recreate a deleted registry entry.
-
-
-Community Beta release preparation is local and default-off. See the
-[publication gates and update channels](docs/3.0-beta-publication-checklist.md)
-and the [owner operations and recovery guide](docs/3.0-beta-operations.md).
-Hosted policy is controlled separately from this source tree. Do not infer the
-current hosted collection or submission setting from these defaults. Published betas use the identity-only authentication flow; hosted policy and
-Production readiness remain separately controlled.
-
-## Discovery 3.0 Beta
-
-Use the [beta installation guide](docs/3.0-beta-README.md),
-[privacy and retention policy](docs/3.0-beta-privacy.md), and
-[owner operations guide](docs/3.0-beta-operations.md). Published beta releases use
-signed identity proofs and rotating Discovery sessions; Civitai API credentials
-remain local. A public download does not grant Community membership.
-Linux application testing is owner-waived and Linux support remains experimental.
-
-Civitai Artist Discovery is a local, artist-first browser for finding creators on
-[Civitai](https://civitai.red). Instead of presenting another image-first popularity
-feed, it groups a calendar day's artwork by creator and can order those creators using
-the artwork you have reacted to.
-
-The project's purpose is to make artist discovery on Civitai easier: surface creators
-whose work matches your interests, show emerging artists, and make it simple to explore
-their images, react, and follow without losing your place in a very large daily feed.
-
-This is an independent community project. It is not affiliated with, endorsed by, or
-sponsored by Civitai.
-
-## Project status
-
-Version 2.2.1 is the current stable release. The stable application provides the shared image-first interface,
-calendar navigation, streamlined filters and settings, richer artist cards, Time Machine,
-and the redesigned taste profile. Windows is the primary and only routinely tested
-platform.
-
-See the [2.0 release notes](docs/release-notes.md) for release highlights and upgrade
-details.
-
-The underlying application is Python, SQLite, HTML, CSS, and JavaScript. Running from
-source on desktop Linux is experimental: secure OAuth storage is implemented through the
-desktop's Secret Service keyring, but Linux has not yet been validated on physical test
-systems and is not officially supported. The existing packaging scripts remain
-Windows-only.
-
-## Major features
-
-- Builds Morning, Evening, or full-day Civitai Red galleries for completed dates.
-- Groups all collected images into one carousel per artist and pages 50 artists at a
-  time.
-- Offers Large, Medium, and Small preview cards whose image, header, controls, and
-  typography scale together.
-- Shows videos in the same cards and carousels as images. A video card displays a still
-  frame and plays itself, muted, while it is on screen; scrolling away stops playback and
-  aborts the download, and a play/pause control overrides either choice. The details
-  dialog plays the larger file with controls.
-- Provides **For you**, **Popular**, **New to you**, **Followed first**, and
-  **Emerging first** views.
-- Ranks **Popular** by the sum of reactions across every visible image each artist posted
-  that day, and opens each card on that artist's most-reacted image.
-- Uses reaction history plus a cached fingerprint of the account's public upload history
-  to personalize discovery and explain why a creator ranked highly. The initial upload
-  scan is paginated once; later refreshes stop at known images and store only new uploads.
-- Treats an upload-history tag as strong only when it recurs and is at least 50% more common
-  than in the local Civitai comparison sample, preventing generic and one-off tags from
-  driving recommendations.
-- Blends two creators similar to the user's uploaded work, one familiar favorite, and one
-  emerging match in **For you**. Reaction-taste matches fill any unavailable lane.
-- Clearly marks **For you** as preliminary while the background tag analysis is still
-  preparing a gallery, shows its progress, and refreshes the ranking automatically when
-  the tag-backed personalization is ready.
-- Shows creator avatars and follower counts and highlights emerging creators under 1,000
-  followers.
-- Collects secondary display controls under the shared Settings cog: card size,
-  viewed-card dimming, and an optional 50/100/150/200-image daily limit. These preferences
-  re-filter saved data without another download.
-- Supports Like, Heart, Laugh, and Cry reactions plus follow/unfollow when Civitai grants
-  social-write access.
-- Saves the current image to one of the connected account's Civitai collections from the
-  card menu, and adds unwanted creators directly to Civitai Hidden Users.
-- Imports Civitai Content Controls, including hidden creators, hidden images, hidden tags,
-  blocked-by accounts, and category switches.
-- Defaults to PG and PG-13. PG, PG-13, R, X, and XXX can be displayed independently;
-  mature levels are explicit opt-ins.
-- Filters galleries and carousels by generation model.
-- Remembers seen creators and moves previously viewed cards later on a fresh visit without
-  reshuffling the active page. The visual dimming can be disabled independently without
-  clearing or weakening that discovery history.
-- Restores the selected day, day segment, view, model filter, card size, loaded depth, and
-  scroll position within the browser session.
-- Stops and resumes long collections from SQLite checkpoints.
-- Collects lightweight listing data first; full prompts and generation resources are read
-  only when an image's detail view is opened.
-- Retains Civitai's listing-provided visual hash for newly collected images, allowing
-  duplicate and cross-creator repost rates to be measured locally without extra API calls.
-- Retries the original artwork when a generated Civitai CDN preview is unavailable.
-- Includes a local **My Profile** dashboard for the creative fingerprint, dominant model
-  signals, reaction mix, distinctive tags, favorite creators, and creators worth following.
-  Worth Following starts after reactions to 10 distinct images from an unfollowed artist;
-  gallery hearts use a lighter 5-image threshold and also disappear once the artist is followed.
-- Refreshes My Profile automatically when its last successful Civitai read is more than
-  24 hours old, deferring while a daily gallery is being built. Known tags and upload
-  fingerprint pages are reused; the reacted-image listing is still reconciled for accuracy.
-- Keeps application-managed databases, configuration, caches, credentials, and logs in
-  a portable `data/` folder beside the executable.
-- Shows a Windows notification-area icon with **Open** and **Exit** while the local server
-  is running.
-- Checks the project's GitHub releases once per day and offers an in-app, user-approved
-  update with release notes, verified download progress, portable-data preservation,
-  rollback on installation failure, and automatic restart. Automatic checks can be
-  disabled in **My Profile**.
-
-## Requirements
-
-- Windows 10 or 11 is the currently tested environment.
-- Python 3.10 or newer to run from source. Development currently uses Python 3.14.
-- A modern web browser.
-- A Civitai account for the personalized gallery, profile analysis, follows, and
-  reactions.
-- Internet access to Civitai's public REST API, authenticated site API, and image CDN.
-- Internet access to GitHub's public release API and release downloads when update
-  checking or installation is enabled; no GitHub account or token is required.
-- Port `8765` available during OAuth sign-in. The application itself uses an available
-  random loopback port.
-- On Linux, a desktop Secret Service provider such as GNOME Keyring, running in the same
-  D-Bus session and unlocked.
-
-Windows uses the conditionally installed Pillow and pystray packages for its notification-
-area icon. Linux does not install or import the Windows tray integration; it additionally
-uses the pinned `keyring` package to access Secret Service. `requirements-dev.txt` includes
-the runtime requirements plus the pinned tools used for browser tests and packaging.
-
-## Installation from source
+Use Python **3.11 or newer** on Windows, with a modern browser. In this checkout:
 
 ```powershell
-git clone https://github.com/theevildarkmage-hue/Civitai-Artist-Discovery.git
-cd Civitai-Artist-Discovery
-py -m venv .venv
-.\.venv\Scripts\Activate.ps1
-py -m pip install --upgrade pip
-py -m pip install -r requirements.txt
-py -m pip install -r requirements-dev.txt
-py -m playwright install chromium
+py -3.12 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install --upgrade pip
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe server.py --stable
 ```
 
-Playwright and Chromium are required only for the browser test suite. PyInstaller and
-Pillow are required only for packaging. On Windows, the runtime requirements file does
-not install any package. On Linux, it installs `keyring` and its Secret Service support.
+The stable-source entry point uses `data-music-discovery/` beside this source tree.
+A plain development launch uses `data-music-development/`. Neither automatically
+loads an original Discovery or Companion profile. Keep each profile intact,
+including its protected credentials and `discovery/comment-outcomes.sqlite3`.
 
-No configuration file is required. Packaged builds create `data/` beside the executable.
-Stable source runs create `data-production-3.0/`; ordinary Development source runs
-use `data-dev-3.0/` or an explicitly selected development profile. Existing data is
-not automatically moved. Extract packaged builds to a user-writable folder.
+Open **Music Scout → Collections & privacy** to add collection IDs or Civitai
+collection links. Up to twelve collections are supported. Initial suggested feeds
+can be removed or renamed locally without changing anything on Civitai.
 
-## Launching
+Linux source/Podman support is inherited and has not been verified on a physical
+Linux desktop in this update. The container expects a desktop session/keyring;
+it is not a recipe for publishing an unauthenticated network service.
 
-From PowerShell:
+## Account actions and privacy
+
+Hosted Community and activity reporting are **off by default** and have separate
+local opt-ins. Civitai sign-in and personal browsing work without Community enrollment.
+Enabling it shares the public account identity with the original author's service;
+optional activity reporting additionally shares usage time, version and platform.
+Turning it off does not delete records already held there.
+
+This fork accepts connections only from this device. LAN sharing is disabled
+pending authenticated client access. New diagnostic records contain fixed operation,
+status and category fields; historical logs and personal galleries remain local data.
+
+Comments and collection changes are never automatically replayed. If a compound
+action has an uncertain or partial outcome, the app blocks repetition even after
+restart. Inspect and complete it on Civitai. Clearing the profile would also remove
+that protection, so retain the outcome journal.
+
+The original author's binary updater is not used for this fork. Update checks point
+here and default off; automatic binary installation is disabled. This update delivers
+source, not a signed installer or a published Windows executable.
+
+## Validation and development
 
 ```powershell
-.\scripts\start.ps1
+.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
+.\.venv\Scripts\python.exe -m playwright install chromium
+.\.venv\Scripts\python.exe scripts/run_tests.py --only music_reliability music_settings_browser music_scout music_scout_http collectalytics_http
 ```
 
-Or directly:
+Tests use isolated profiles and synthetic accounts. Do not replace test fixtures with
+real credentials. Live authenticated posting is not part of the automated checks.
 
-```powershell
-py server.py
-```
+- [Implementation, migrations and tradeoffs](docs/MUSIC-FORK.md)
+- [Exact verification and outstanding acceptance](docs/MUSIC-VERIFICATION.md)
+- [Preserved upstream README](UPSTREAM-README.md) — original-project guidance;
+  the fork's setup and privacy behavior above take precedence.
+- [MIT license and attribution](LICENSE)
 
-Experimental Linux source launch:
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -r requirements.txt
-python server.py --stable
-```
-
-An unlocked desktop Secret Service keyring is required for Linux sign-in. This is
-experimental Linux support; the Windows package remains the routinely tested
-distribution. See the [Linux setup and troubleshooting guide](docs/3.0-linux-stable-source.md).
-
-The executable is a local Python/SQLite server; the browser tab is its interface rather
-than a standalone webpage. The server listens only on the local computer and opens the
-application in your default browser. On Windows, its notification-area icon remains
-visible while it runs and provides **Open** and **Exit**. Use **Close app** in the page or
-**Exit** in that menu to stop it cleanly; closing the browser tab alone does not stop the
-Python process.
-
-## Civitai connection and configuration
-
-Public image collection uses `https://civitai.red/api/v1/images`, the public API Civitai
-expressly provides for automated access. The endpoint returns at most 200 listings per
-request, so a full all-ratings day can require hundreds of serialized requests.
-Collection is deliberately sequential, adaptively paced, retried with backoff, and
-checkpointed after every page. The app collects each required Civitai browsing-level feed
-separately, combines duplicate image IDs locally, and marks a block ready only after
-every feed has crossed the requested time boundary. If Civitai stops a feed early, the
-block remains unfinished with saved progress instead of publishing a truncated gallery.
-
-Bulk collection always requests lightweight listings with `withMeta=false`. Full prompts
-and generation resources are fetched lazily for the image whose detail dialog is opened.
-This keeps a large day practical and avoids downloading full metadata for tens of
-thousands of images a user may never inspect.
-
-### How far back a day can be built
-
-Civitai's public API caps cursor traversal at roughly offset 49,000 and offers no date
-filter, so the reachable history is bounded by row count rather than by time. A
-high-volume browsing level therefore reaches back only about two days while a quiet one
-reaches five, and because a block requires every level it needs, the most restrictive one
-decides. `HistoryArchive.feed_floor` probes each required level with a single one-row
-request before collecting, and `history_window` reports the binding floor and the oldest
-day still buildable; `GET /api/history/window` exposes it to the build screen. Days
-already collected stay viewable regardless -- the limit applies only to new collection.
-
-### Why not Civitai's search service
-
-The site's own image browser is backed by a search index that accepts an exact date range
-and returns 1,000 listings per request, which would make collection roughly seven times
-faster. The app does not use it. Civitai's Terms of Service (11.4) permit automated access
-only through "interfaces we expressly provide for automated access, such as our public API
-or official Model Context Protocol (MCP) server, in each case accessed with your own valid
-credentials." That index is neither expressly provided for automated access nor reachable
-with the user's own credentials -- it is reached with the search key Civitai's frontend
-ships to browsers. Speed is not a reason to use a credential that was not issued to you.
-
-`discovery/search.py` and `CIVITAI_HISTORY_BACKEND=search` remain in the tree for local
-diagnosis of the v1 collector only. They are not a supported configuration, are off by
-default, and should not be enabled in a distributed build.
-
-Sign-in uses OAuth 2.0 Authorization Code with PKCE. The source contains a public OAuth
-client identifier, not a client secret. Developers can use their own public Civitai OAuth
-application by setting:
-
-```powershell
-$env:CIVITAI_OAUTH_CLIENT_ID = "your-public-client-id"
-py server.py
-```
-
-Register `http://localhost:8765/oauth/callback` exactly as the redirect URI. A client ID
-can also be entered through the first-launch UI. Access and refresh tokens are protected
-with Windows DPAPI on Windows or stored in the desktop Secret Service keyring on Linux.
-The app deliberately refuses plaintext or unavailable Linux keyring backends. Tokens are
-never sent to browser JavaScript or written to application logs.
-
-The authenticated integration reads reaction history, follows, creator profiles, tags,
-and the account's Content Controls. Follow and reaction writes occur only when the user
-clicks the corresponding control. Civitai endpoints and response shapes are external
-dependencies and may change independently of this project.
-
-## Local data and privacy
-
-All application-managed runtime data is stored portably at:
-
-```text
-<application folder>\data
-```
-
-An upgrade from an earlier build moves `%LOCALAPPDATA%\CivitaiArtistDiscovery` into this
-folder when possible. If permissions prevent the move, the older location remains active
-for that launch so existing archives and credentials are not hidden. Linux OAuth tokens
-remain in Secret Service rather than `data/`, because the app refuses to store them as
-portable plaintext.
-
-It can include:
-
-- `history/history.sqlite3`: daily image and creator listings, visual hashes, checkpoints,
-  and collection metrics;
-- `discovery/taste.sqlite3`: reaction-derived taste analysis, seen state, tags, and
-  mirrored Content Controls;
-- `oauth_tokens.dpapi`: Windows-only DPAPI-encrypted OAuth credentials;
-- `oauth_client.json` and `settings.json`: local configuration, including Gallery preferences;
-- creator/follow caches, the single-instance marker, and `error.log`;
-- `api-failures.jsonl`: a size-limited, rotating journal of failed Civitai API status
-  codes, safe response headers, request context, and truncated response excerpts. Common
-  credential-shaped fields are redacted before the entry is written.
-- `update/`: the cached daily release check and, only while an approved update is being
-  prepared, its verified archive, staging folder, rollback copy, and result receipt.
-
-The application does not create Registry settings. These files can contain account
-identifiers, creator names, reaction history, browsing preferences, image metadata, API
-response excerpts, and diagnostic paths. Do not attach or commit the data folder when
-filing an issue; review and share only the specific diagnostic entries that are needed.
-
-For isolated development or testing, redirect all runtime data to another directory:
-
-```powershell
-$env:CIVITAI_HISTORY_DATA_DIR = "$env:TEMP\civitai-artist-discovery-dev"
-py server.py
-```
-
-The app never uploads its local taste analysis. It contacts Civitai to collect listings,
-read the connected account, and perform user-requested Civitai actions.
-
-## Content levels and collection time
-
-PG and PG-13 are enabled by default. R, X, and XXX require explicit opt-in. Each image's
-individual browsing level is stored with its lightweight listing, so any non-empty
-combination can be displayed locally—for example, only PG-13 or only R. Collection uses
-non-overlapping browsing-level feeds: safe coverage uses PG/PG-13; through-R coverage
-adds R; and all-ratings coverage also collects X and XXX independently. Results are
-deduplicated by image ID. Every completed block records that coverage; selecting a level
-above it requests an upgrade scan, while changing the visible levels within existing
-coverage filters the local database immediately.
-
-Collection time depends heavily on rating level, posting volume, latency, and rate
-limiting. The fixed all-ratings benchmark contains 82,050 retained images and 458
-collection pages. The boundary-verified collector budgets up to 170 date-seeking requests
-across five feeds and two halves, producing an estimated range of roughly 52 to 77 minutes.
-Preserved
-PG/PG-13 measurements required 69–84 collection pages for a half day and 140–147 for a
-full day, so even a clean safe half is a multi-minute operation.
-
-The build screen uses fixed capacity benchmarks rather than learning from runtime rows,
-which may describe partial or resumed work. The low end applies the known five-second API
-cadence; the high end applies the delayed request cycle from the hour-long all-ratings
-run. Coverage and time-range selections choose the corresponding fixed image and request
-counts, while a half already complete at the requested coverage is omitted.
-
-Each block records wall-clock time, seek/collection page counts, transferred and decoded response bytes,
-date-seeking and organization time, deliberate API pacing time, response/read time, retry
-wait time, separate rate-limit/service/network retry counts, and the final adaptive pacing
-interval. These measurements distinguish Civitai request cadence from local processing and
-raw transfer volume; they contain no artwork files or personal credentials.
-
-Morning and Evening can be built independently. The build screen reports each half as
-ready, unfinished with saved progress, or not built. **Full day** queues both halves,
-skips halves already complete at the requested coverage, resumes partial checkpoints, and
-opens the locally merged All Day gallery when both finish. If only one half exists, it
-remains viewable and the gallery offers **Complete this day** rather than hiding it behind
-the collection screen. Collection coverage and later viewing filters are presented as
-separate concepts; viewing filters never redownload an already-covered level.
-
-## Content Controls
-
-Creator- and image-level exclusions are applied from the account data Civitai returns.
-Because the daily listing feed does not include tags, the app verifies tags in small
-batches as artwork approaches the screen and before assigning its preview URL. An image
-matching a hidden Civitai tag is removed without being displayed; the same check is made
-before moving through a creator's carousel. Opening image details does not rebuild or
-reset the feed. See [docs/content-controls.md](docs/content-controls.md) for the detailed
-behavior and API tradeoff.
-
-## Testing
-
-Tests are existing standalone Python scripts rather than a separate test framework. They
-use temporary data directories and synthetic records.
-
-```powershell
-Get-ChildItem .\tests\*.py | ForEach-Object {
-  py $_.FullName
-  if ($LASTEXITCODE) { throw "Test failed: $($_.Name)" }
-}
-```
-
-Some tests start local servers and Chromium. If a run is interrupted, check for a leftover
-Python test process before running the suite again.
-
-## Building the Windows package
-
-```powershell
-.\scripts\build_exe.ps1
-```
-
-The script generates the icon and Windows version resource, then creates a portable
-PyInstaller folder build under `dist/`; its `data/` folder is created on first launch.
-Release packaging is available through
-`scripts/release.ps1`. Generated packages and local release backups are intentionally
-excluded from Git.
-
-The packaged app's updater expects the release asset name
-`CivitaiArtistDiscovery-<version>.zip`, matching the version in `server.py`, and requires
-the SHA-256 digest GitHub records for the uploaded asset. Draft releases, missing or
-renamed packages, unsigned digest metadata, and downloads outside this repository are
-ignored. See [docs/updates.md](docs/updates.md) for the complete update and recovery flow.
-
-One-file builds are intentionally disabled: they extract their runtime into the Windows
-temporary folder and therefore do not meet this project's portable-only behavior. Windows
-packages include the tray libraries' license texts and [third-party notices](THIRD_PARTY_NOTICES.md).
-
-Windows packages are unsigned, so Windows SmartScreen or managed-device policy may warn or
-block them. Review the source and build locally if preferred.
-
-## Contributing and license
-
-Focused contributions are welcome; see [CONTRIBUTING.md](CONTRIBUTING.md). The project is
-available under the [MIT License](LICENSE).
+Music discovery uses resource credits rather than audio recognition. Videos loop;
+600 milliseconds on screen counts as viewed. Collection figures are bounded curation
+statistics, not listener analytics. Native playback and live account compatibility
+still require user acceptance.

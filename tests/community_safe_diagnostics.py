@@ -29,7 +29,7 @@ class SafeDiagnostics(unittest.TestCase):
                 for secret in secrets:self.assertNotIn(secret,json.dumps(responses))
             text=(root/'error.log').read_text()
             for secret in secrets:self.assertNotIn(secret,text)
-            for category in ('unexpected','invalid_response','timeout','transport'):self.assertIn('category='+category,text)
+            for category in ('unexpected','invalid_response','timeout','transport'):self.assertIn('\"category\": \"'+category+'\"',text)
             self.assertNotIn('Traceback',text)
     def test_repeated_outages_are_coalesced_and_cardinality_bounded(self):
         with tempfile.TemporaryDirectory() as folder:
