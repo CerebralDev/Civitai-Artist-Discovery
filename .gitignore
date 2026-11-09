@@ -9,6 +9,7 @@
 # Repository entry points
 !.gitignore
 !README.md
+!UPSTREAM-README.md
 !AGENTS.md
 !CONTRIBUTING.md
 !LICENSE
@@ -60,6 +61,8 @@ docs/*
 !docs/beta-release.md
 !docs/release-notes.md
 !docs/updates.md
+!docs/MUSIC-FORK.md
+!docs/MUSIC-VERIFICATION.md
 !docs/time-machine-spec.md
 !docs/2.0-project-plan.md
 !docs/2.0-progress.md
