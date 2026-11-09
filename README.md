@@ -132,6 +132,22 @@ Windows-only.
   frame and plays itself, muted, while it is on screen; scrolling away stops playback and
   aborts the download, and a play/pause control overrides either choice. The details
   dialog plays the larger file with controls.
+- Adds a **Music Scout** tab for skimming videos one at a time with sound, using ← and →.
+  It has three queues: the latest videos capped at a few per creator (3 by default), the
+  latest videos that credit a music generation model (YuE2 3B, ACE-Step Audio Gen,
+  MiniMax Music 3), and every latest video.
+  Signed in, two curated collections each get two more queues: the
+  collection itself in recently added order, and a hub playing the newest videos from
+  every creator ever collected there, capped per creator. These are Music Focus 🎸 (with
+  MF hub) and Sillycat83's H3 Movies Museum 🎬 (with Museum hub). Only videos are
+  requested, the next one buffers while the current one plays, and a thumbnail strip shows
+  the loaded queue. A video counts as viewed after a second on screen; viewed videos are
+  faded in the strip and remembered across sessions, and a queue opens on the first one
+  not viewed yet. Reactions sit beside each video, with a 🎸 and a 🎬 marker showing
+  whether it is in each collection. Only Music Focus's owner can add to it from here:
+  either with the default comment, posted as is, or by copying that comment and doing both
+  steps on Civitai. Removing is left to Civitai. Queues follow the selected viewing levels
+  and leave out hidden creators and hidden images.
 - Provides **For you**, **Popular**, **New to you**, **Followed first**, and
   **Emerging first** views.
 - Ranks **Popular** by the sum of reactions across every visible image each artist posted
@@ -257,6 +273,26 @@ An unlocked desktop Secret Service keyring is required for Linux sign-in. This i
 experimental Linux support; the Windows package remains the routinely tested
 distribution. See the [Linux setup and troubleshooting guide](docs/3.0-linux-stable-source.md).
 
+Experimental Linux container launch, which keeps Python and its packages off the host:
+
+```bash
+mkdir -p data-3.0
+podman compose up --build
+```
+
+`compose.yaml` builds a rootless Podman image from the checkout (`container/`) and runs
+it as your own user with host networking and your desktop's D-Bus session. Credentials
+therefore still go to the desktop Secret Service, the browser opens through the desktop
+portal, and its data lives in `data-3.0/` beside the checkout. The image launches
+`server.py --stable`, so it runs the stable release on the Production project and its
+hosted Community. Its data folder is kept apart from `data-dev-3.0/`, which a plain source
+launch uses for the Development beta, and from 2.x's `data/`. The project, image and
+container are all named for 3.0, so a 2.x container is left alone. The container is a
+sandbox for one person on one desktop. Hosted access and submission policy still apply.
+The container is not a way to host the app. Changing **LAN access** in Settings stops
+the container instead of restarting the app; the new setting takes effect on the next
+`up`.
+
 The executable is a local Python/SQLite server; the browser tab is its interface rather
 than a standalone webpage. The server listens only on the local computer and opens the
 application in your default browser. On Windows, its notification-area icon remains
@@ -346,6 +382,8 @@ It can include:
   and collection metrics;
 - `discovery/taste.sqlite3`: reaction-derived taste analysis, seen state, tags, and
   mirrored Content Controls;
+- `discovery/musicscout.sqlite3`: which Music Scout videos were viewed, and each
+  collection hub's saved list of its creators' newest videos;
 - `oauth_tokens.dpapi`: Windows-only DPAPI-encrypted OAuth credentials;
 - `oauth_client.json` and `settings.json`: local configuration, including Gallery preferences;
 - creator/follow caches, the single-instance marker, and `error.log`;
@@ -412,8 +450,11 @@ separate concepts; viewing filters never redownload an already-covered level.
 ## Content Controls
 
 Creator- and image-level exclusions are applied from the account data Civitai returns.
-Because the daily listing feed does not include tags, the app verifies tags in small
-batches as artwork approaches the screen and before assigning its preview URL. An image
+The Filters menu can independently pause personal tag filters, hidden and blocked
+account filters, or hidden artworks (including images hidden after reporting them).
+All three switches default to on. Rating-related exclusions follow browsing levels.
+Because the daily listing feed does not include tags, enabling tag filters verifies tags
+in small batches as artwork approaches the screen and before assigning its preview URL. An image
 matching a hidden Civitai tag is removed without being displayed; the same check is made
 before moving through a creator's carousel. Opening image details does not rebuild or
 reset the feed. See [docs/content-controls.md](docs/content-controls.md) for the detailed

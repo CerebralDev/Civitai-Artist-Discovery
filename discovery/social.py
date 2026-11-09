@@ -267,6 +267,37 @@ class SocialClient:
             "removeFromCollectionIds": [],
         })
 
+    def comment_on_image(self, image_id: int, content: str) -> object:
+        """Post one comment. ``content`` is the HTML Civitai's own editor produces."""
+        return self.mutate("commentv3.create", {
+            "entityId": int(image_id), "entityType": "image", "content": content,
+        })
+
+    def set_collection_items_status(self, collection_id: int, collection_item_ids: list[int],
+                                    status: str) -> object:
+        """Accept or reject items in a collection the account owns or manages."""
+        return self.mutate("collection.updateCollectionItemsStatus", {
+            "collectionId": int(collection_id),
+            "collectionItemIds": [int(value) for value in collection_item_ids],
+            "status": status,
+        })
+
+    def image_collection_ids(self, image_ids: list[int]) -> dict[int, set[int] | None]:
+        """Which of the account's collections hold each image; None where Civitai has no record.
+
+        Any other per-item failure raises for the whole batch, like batch_query_optional.
+        """
+        values = self.batch_query_optional("collection.getUserCollectionItemsByItem",
+                                           [{"type": "Image", "imageId": int(value)} for value in image_ids])
+        result: dict[int, set[int] | None] = {}
+        for image_id, value in zip(image_ids, values):
+            if not isinstance(value, list):
+                result[int(image_id)] = None
+                continue
+            result[int(image_id)] = {int(row["collectionId"]) for row in value
+                                     if isinstance(row, dict) and row.get("collectionId")}
+        return result
+
     def hide_user(self, user_id: int, username: str | None = None) -> object:
         """Add one creator to the connected account's Civitai Content Controls."""
         data = {"id": int(user_id), "username": username or None}
